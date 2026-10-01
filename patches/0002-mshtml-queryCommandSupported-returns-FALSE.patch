@@ -1,0 +1,21 @@
+Subject: [PATCH] mshtml: Report commands as unsupported in queryCommandSupported instead of failing.
+
+Pages feature-test with document.queryCommandSupported("copy"); E_NOTIMPL turns
+into a script exception that aborted Adobe's sign-in page before it rendered.
+---
+--- a/dlls/mshtml/htmldoc.c
++++ b/dlls/mshtml/htmldoc.c
+@@ -1561,8 +1561,11 @@
+         VARIANT_BOOL *pfRet)
+ {
+     HTMLDocumentNode *This = impl_from_IHTMLDocument2(iface);
+-    FIXME("(%p)->(%s %p)\n", This, debugstr_w(cmdID), pfRet);
+-    return E_NOTIMPL;
++    FIXME("(%p)->(%s %p) semi-stub\n", This, debugstr_w(cmdID), pfRet);
++    if(!pfRet)
++        return E_POINTER;
++    *pfRet = VARIANT_FALSE;
++    return S_OK;
+ }
+ 
+ static HRESULT WINAPI HTMLDocument_queryCommandEnabled(IHTMLDocument2 *iface, BSTR cmdID,

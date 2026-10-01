@@ -1,0 +1,35 @@
+Subject: [PATCH] winmm: Return the DRV_QUERYFUNCTIONINSTANCEIDSIZE size as a ULONG.
+
+Windows writes a ULONG. Writing a DWORD_PTR overwrote the 4 bytes after the
+caller's ULONG on 64-bit: Adobe After Effects 2020 keeps a list-head pointer there
+and crashes in dvaaudiodevice.dll during "Initializing MediaCore".
+---
+--- a/dlls/winmm/waveform.c
++++ b/dlls/winmm/waveform.c
+@@ -3165,7 +3165,7 @@
+     return MMSYSERR_NOERROR;
+ }
+ 
+-static UINT WINMM_QueryInstanceIDSize(UINT device, DWORD_PTR *len, BOOL is_out)
++static UINT WINMM_QueryInstanceIDSize(UINT device, ULONG *len, BOOL is_out)
+ {
+     UINT count;
+     WINMM_MMDevice **devices;
+@@ -3251,7 +3251,7 @@
+     switch(uMessage){
+     case DRV_QUERYFUNCTIONINSTANCEIDSIZE:
+         return WINMM_QueryInstanceIDSize(HandleToULong(hWaveOut),
+-                (DWORD_PTR*)dwParam1, TRUE);
++                (ULONG*)dwParam1, TRUE);
+     case DRV_QUERYFUNCTIONINSTANCEID:
+         return WINMM_QueryInstanceID(HandleToULong(hWaveOut), (WCHAR*)dwParam1, dwParam2, TRUE);
+     case DRV_QUERYDEVICEINTERFACESIZE:
+@@ -3657,7 +3657,7 @@
+     switch(uMessage){
+     case DRV_QUERYFUNCTIONINSTANCEIDSIZE:
+         return WINMM_QueryInstanceIDSize(HandleToULong(hWaveIn),
+-                (DWORD_PTR*)dwParam1, FALSE);
++                (ULONG*)dwParam1, FALSE);
+     case DRV_QUERYFUNCTIONINSTANCEID:
+         return WINMM_QueryInstanceID(HandleToULong(hWaveIn), (WCHAR*)dwParam1, dwParam2, FALSE);
+     case DRV_QUERYDEVICEINTERFACESIZE:

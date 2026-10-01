@@ -1,0 +1,4 @@
+LIBRARY filedialog.dll
+EXPORTS
+    DllGetClassObject PRIVATE
+    DllCanUnloadNow PRIVATE

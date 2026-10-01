@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# Double-click front end for ae-linux: find Adobe installs in Wine prefixes, confirm,
+# then set them up (or run an Adobe installer when none are found).
+set -uo pipefail
+here=$(dirname "$(readlink -f "$0")")
+lib=$(readlink -f "$here/../lib")
+title="After Effects on Linux"
+command -v zenity >/dev/null || { "$here/ae-linux" setup; exit; }
+
+run_with_progress() {  # run_with_progress TEXT CMD... — shows the command's log lines
+    local log status
+    log=$(mktemp)
+    ("$@" > "$log" 2>&1; echo $? > "$log.status") &
+    tail -f "$log" --pid=$! 2>/dev/null | sed -u 's/\x1b\[[0-9;]*m//g; s/^/# /' |
+        zenity --progress --pulsate --auto-close --no-cancel --width=520 --title="$title" --text="$1" 2>/dev/null
+    wait
+    status=$(cat "$log.status" 2>/dev/null || echo 1)
+    if [[ "$status" != 0 ]]; then
+        zenity --text-info --width=700 --height=420 --title="$title — failed" --filename="$log" 2>/dev/null
+    fi
+    rm -f "$log" "$log.status"
+    return "$status"
+}
+
+json=$(python3 "$lib/scan.py" --json)
+rows=$(printf '%s' "$json" | python3 -c '
+import json, sys
+for a in json.load(sys.stdin):
+    state = "genuine" if a["genuine"] else "MODIFIED — will not be set up"
+    print("TRUE" if a["genuine"] else "FALSE"); print(a["folder"]); print(a["version"])
+    print(a["status"]); print(state); print(a["prefix"])')
+
+if [[ -z "$rows" ]]; then
+    zenity --question --width=460 --title="$title" --ok-label="Choose installer…" --cancel-label="Close" \
+        --text="No After Effects or Media Encoder installs were found in your Wine prefixes.\n\nPick the Set-up.exe of your own Adobe installer to install one." 2>/dev/null || exit 0
+    setup=$(zenity --file-selection --title="Adobe installer (Set-up.exe)" --file-filter="Set-up.exe | Set-up.exe *.exe" 2>/dev/null) || exit 0
+    run_with_progress "Installing… sign in with your Adobe account when the installer asks." \
+        "$here/ae-linux" install-app "$setup" && zenity --info --width=360 --title="$title" \
+        --text="Done. Find it in the menu under Sound &amp; Video." 2>/dev/null
+    exit
+fi
+
+mapfile -t list <<< "$rows"
+choice=$(zenity --list --checklist --width=900 --height=360 --title="$title" \
+    --text="Adobe apps found in Wine prefixes. Tick the ones to set up (theme, fonts, file dialogs, GPU, menu entries):" \
+    --column="Set up" --column="App" --column="Version" --column="Tested" --column="Files" --column="Prefix" \
+    --print-column=6 --separator=$'\n' "${list[@]}" 2>/dev/null) || exit 0
+[[ -n "$choice" ]] || exit 0
+
+mapfile -t prefixes < <(printf '%s\n' "$choice" | sort -u)
+for p in "${prefixes[@]}"; do
+    if printf '%s' "$json" | python3 -c 'import json,sys; sys.exit(0 if any(a["prefix"]==sys.argv[1] and not a["genuine"] for a in json.load(sys.stdin)) else 1)' "$p"; then
+        zenity --warning --width=460 --title="$title" --text="$p contains Adobe files that were modified after Adobe signed them.\nOnly unmodified installs are supported; reinstall from Adobe and try again." 2>/dev/null
+        exit 1
+    fi
+done
+zenity --question --width=460 --title="$title" --ok-label="Set up" \
+    --text="Set up these prefixes?\n\n$(printf '• %s\n' "${prefixes[@]}")\n\nApps in them are closed first." 2>/dev/null || exit 0
+run_with_progress "Setting up… (first run downloads fonts and runtimes)" "$here/ae-linux" setup "${prefixes[@]}" &&
+    zenity --info --width=360 --title="$title" --text="Done. Start the apps from the menu (Sound &amp; Video)." 2>/dev/null

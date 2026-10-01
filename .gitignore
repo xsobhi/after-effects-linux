@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+src/filedialog/*.dll
+src/filedialog/*.lib
+src/filedialog/*.pdb
+src/filedialog/test/*.exe
+src/filedialog/test/*.pdb

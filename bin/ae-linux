@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# ae-linux — manage Adobe After Effects / Media Encoder under Wine.
+#
+#   ae-linux scan                     list installs found in Wine prefixes (version, genuine?)
+#   ae-linux setup [PREFIX...]        prepare prefixes with installs (default: all found, or
+#                                     the default prefix) and create menu entries
+#   ae-linux install-app SETUP.exe [PREFIX]
+#                                     run Adobe's (genuine, signed) installer in a prefix
+#   ae-linux theme [PREFIX]           re-apply the desktop theme/fonts after changing them
+#   ae-linux verify [PREFIX]          check every Adobe program file against Adobe's signature
+#   ae-linux gui                      the same, with dialogs (what the menu entry runs)
+set -euo pipefail
+here=$(dirname "$(readlink -f "$0")")
+LIB_DIR=$(readlink -f "$here/../lib")
+# shellcheck source=../lib/common.sh
+source "$LIB_DIR/common.sh"
+source "$LIB_DIR/prefix_setup.sh"
+[[ -e /dev/nvidiactl ]] && NVIDIA=1
+
+found_json() { python3 "$LIB_DIR/scan.py" --json "$@"; }
+
+found_prefixes() {  # prefixes holding genuine installs
+    found_json "$@" | python3 -c 'import json,sys; [print(p) for p in dict.fromkeys(a["prefix"] for a in json.load(sys.stdin) if a["genuine"])]'
+}
+
+make_launchers() {
+    local json
+    json=$(mktemp --suffix=.json)
+    found_json "$@" > "$json"
+    python3 "$LIB_DIR/launchers.py" "$json"
+    rm -f "$json"
+}
+
+cmd=${1:-help}
+shift || true
+case "$cmd" in
+    scan) python3 "$LIB_DIR/scan.py" "$@" ;;
+    setup)
+        mapfile -t prefixes < <(if (($#)); then printf '%s\n' "$@"; else found_prefixes; fi)
+        ((${#prefixes[@]})) || prefixes=("$DEFAULT_PREFIX")
+        for p in "${prefixes[@]}"; do setup_prefix "$p"; done
+        make_launchers "${prefixes[@]}"
+        say "Done." ;;
+    install-app)
+        setup=${1:?usage: ae-linux install-app SETUP.exe [PREFIX]}
+        prefix=${2:-$DEFAULT_PREFIX}
+        python3 "$LIB_DIR/verify_adobe.py" "$setup" | grep -q '^ok ' ||
+            die "$setup is not an unmodified Adobe installer; refusing to run it"
+        [[ -f "$prefix/system.reg" ]] || setup_prefix "$prefix"
+        say "Running the Adobe installer (sign in with your Adobe account when asked)"
+        (cd "$(dirname "$setup")" && wine_in "$prefix" "$(readlink -f "$setup")")
+        stop_prefix "$prefix"
+        python3 "$LIB_DIR/scan.py" "$prefix"
+        make_launchers "$prefix" ;;
+    theme)
+        prefix=${1:-$DEFAULT_PREFIX}
+        apply_theme "$prefix"
+        say "Theme applied to $prefix" ;;
+    verify)
+        prefix=${1:-$DEFAULT_PREFIX}
+        dirs=()
+        for d in "Program Files/Adobe" "Program Files/Common Files/Adobe" \
+                 "Program Files (x86)/Adobe" "Program Files (x86)/Common Files/Adobe"; do
+            [[ -d "$prefix/drive_c/$d" ]] && dirs+=("$prefix/drive_c/$d")
+        done
+        python3 "$LIB_DIR/verify_adobe.py" --scan "${dirs[@]}" ;;
+    gui) exec "$here/ae-linux-gui" ;;
+    *) sed -n '2,12s/^# \{0,1\}//p' "$0" ;;
+esac

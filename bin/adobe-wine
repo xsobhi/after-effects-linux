@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# Run a Windows program in the Adobe Wine prefix with the patched runner.
+#   adobe-wine PROGRAM.exe [ARGS...]      (any wine command works: winecfg, regedit, ...)
+# Environment overrides: ADOBE_WINE_PREFIX, ADOBE_WINE_NO_OFFLOAD=1 (virtual displays).
+set -euo pipefail
+base="${ADOBE_WINE_HOME:-$HOME/.local/share/adobe-wine}"
+files="$base/runner/files"
+export WINEPREFIX="${ADOBE_WINE_PREFIX:-$base/prefix}"
+export WINE="$files/bin/wine" WINESERVER="$files/bin/wineserver"
+export PATH="$files/bin:$PATH"
+export WINEDEBUG="${WINEDEBUG:--all}"
+if [[ ! -x "$WINE" ]]; then
+    printf 'The Adobe Wine runner is missing: %s\nRun install.sh first.\n' "$WINE" >&2
+    exit 1
+fi
+
+# Library layout the Proton script normally sets up (GStreamer/FFmpeg for Media Foundation).
+lib="$files/lib"
+export ORIG_LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="$lib/x86_64-linux-gnu:$lib/i386-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export WINEDLLPATH="$lib/vkd3d:$lib/wine:$lib/wine/nvidia-libs/nvml/wine"
+export GST_PLUGIN_SYSTEM_PATH_1_0="$lib/x86_64-linux-gnu/gstreamer-1.0:$lib/i386-linux-gnu/gstreamer-1.0"
+export WINE_GST_REGISTRY_DIR="$base/cache/gstreamer-1.0"
+
+# Render OpenGL, EGL, Vulkan and CUDA on the NVIDIA GPU of hybrid laptops.
+if [[ -z "${ADOBE_WINE_NO_OFFLOAD:-}" ]] && [[ -e /dev/nvidiactl ]]; then
+    export __NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia
+    export __VK_LAYER_NV_optimus=NVIDIA_only
+    [[ -e /usr/share/glvnd/egl_vendor.d/10_nvidia.json ]] &&
+        export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
+    [[ -e /usr/share/vulkan/icd.d/nvidia_icd.json ]] &&
+        export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/nvidia_icd.json
+fi
+# DXVK reports NVIDIA GPUs as AMD unless NVAPI is on; Adobe's GPU sniffers need NVIDIA.
+export DXVK_ENABLE_NVAPI=1 DXVK_LOG_LEVEL="${DXVK_LOG_LEVEL:-none}" VKD3D_DEBUG="${VKD3D_DEBUG:-none}"
+export DXVK_STATE_CACHE_PATH="$base/cache/dxvk"
+export __GL_SHADER_DISK_CACHE=1 __GL_SHADER_DISK_CACHE_PATH="$base/cache/nvidia"
+export __GL_SHADER_DISK_CACHE_SKIP_CLEANUP=1
+mkdir -p "$base/cache/dxvk" "$base/cache/nvidia" "$WINE_GST_REGISTRY_DIR"
+
+# filedialog.dll (Open/Save dialogs) runs this helper to show the desktop's file chooser.
+export ADOBE_FILECHOOSER="$base/app/lib/filechooser.py"
+
+# Proton names every X11 window "steam_proton" unless SteamAppId is set; give each
+# Adobe app its own WM_CLASS (steam_app_<Exe>) so the desktop matches it to its launcher.
+exe="${1:-}"
+exe="${exe##*[\\/]}"
+exe="${exe%.[eE][xX][eE]}"
+exe="${exe// /}"
+if [[ -n "$exe" && "$exe" =~ ^[A-Za-z0-9_-]+$ ]]; then
+    export SteamAppId="$exe"
+    helper="$base/app/lib/wm_helper.py"
+    if [[ -n "${DISPLAY:-}" && -f "$helper" ]]; then
+        # Dark title bars + no shadows on borderless popups (see wm_helper.py).
+        env LD_LIBRARY_PATH="$ORIG_LD_LIBRARY_PATH" python3 "$helper" "steam_app_$exe" $$ 2>/dev/null &
+        helper_pid=$!
+        status=0
+        "$WINE" "$@" || status=$?
+        kill "$helper_pid" 2>/dev/null || true
+        exit "$status"
+    fi
+fi
+exec "$WINE" "$@"

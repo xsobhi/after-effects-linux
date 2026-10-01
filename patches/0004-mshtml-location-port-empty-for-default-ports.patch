@@ -1,0 +1,22 @@
+Subject: [PATCH] mshtml: Return an empty location.port for the scheme's default port.
+
+IE returns "" when the URL has no explicit port; Wine returned e.g. "443", so
+pages building location.protocol + "//" + hostname + port got a different origin
+(Adobe's sign-in page then found no API endpoint for "https://host:443").
+---
+--- a/dlls/mshtml/htmllocation.c
++++ b/dlls/mshtml/htmllocation.c
+@@ -341,6 +341,13 @@
+     hres = IUri_GetPort(uri, &port);
+     if(FAILED(hres))
+         return hres;
++
++    if(hres == S_OK) {
++        DWORD scheme;
++        if(SUCCEEDED(IUri_GetScheme(uri, &scheme)) &&
++           ((scheme == URL_SCHEME_HTTP && port == 80) || (scheme == URL_SCHEME_HTTPS && port == 443)))
++            hres = S_FALSE;
++    }
+ 
+     if(hres == S_OK) {
+         WCHAR buf[12];
