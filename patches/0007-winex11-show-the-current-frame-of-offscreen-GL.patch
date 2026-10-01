@@ -1,0 +1,42 @@
+Subject: [PATCH] winex11: Show the current frame of offscreen OpenGL drawables.
+
+Child windows (After Effects' composition viewer, Premiere's program monitor) render
+offscreen; after each swap the drawable is copied into the toplevel window. Without
+GLX_OML_sync_control (the NVIDIA driver) nothing waited for the swap: it is asynchronous
+and, with the default swap interval of 1, completes at the next vblank, so the copy
+always picked up the previous frame. Apps that redraw only on demand then showed stale
+content until their next redraw (a paused frame stuck at draft quality, selections and
+mask paths appearing a redraw late, ghosting while resizing panels).
+
+Swap offscreen drawables without vsync (the copy is what reaches the screen) and
+glFinish before the copy. Applied to the Proton-CachyOS 11.0 build as a binary patch by
+lib/patch_runner.py.
+---
+--- a/dlls/winex11.drv/opengl.c	2026-10-01 16:04:29.533755195 +0300
++++ b/dlls/winex11.drv/opengl.c	2026-10-01 16:04:29.543092306 +0300
+@@ -915,6 +915,11 @@
+ {
+     BOOL ret = TRUE;
+ 
++    /* Offscreen drawables are put on screen by client_surface_present(), not by the
++     * driver. With vsync the driver completes the swap at the next vblank, after we
++     * already copied the drawable, so every copy showed the previous frame. */
++    if (gl->base.client && InterlockedCompareExchange( &gl->base.client->offscreen, 0, 0 )) interval = 0;
++
+     if (interval < 0 && !has_swap_control_tear) interval = -interval;
+ 
+     switch (swap_control_method)
+@@ -1483,7 +1488,12 @@
+         if (pglXWaitForSbcOML) pglXWaitForSbcOML( gdi_display, gl->drawable, target_sbc, &ust, &msc, &sbc );
+     }
+ 
+-    if (offscreen && !pglXWaitForSbcOML) XFlush( gdi_display );
++    if (offscreen && !pglXWaitForSbcOML)
++    {
++        /* no GLX_OML_sync_control (NVIDIA): make sure the swap is done before the copy */
++        funcs->p_glFinish();
++        XFlush( gdi_display );
++    }
+ 
+     client_surface_present( base->client );
+     return TRUE;
