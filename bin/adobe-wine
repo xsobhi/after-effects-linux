@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Run a Windows program in the Adobe Wine prefix with the patched runner.
 #   adobe-wine PROGRAM.exe [ARGS...]      (any wine command works: winecfg, regedit, ...)
-# Environment overrides: ADOBE_WINE_PREFIX, ADOBE_WINE_NO_OFFLOAD=1 (virtual displays).
+# Environment overrides: ADOBE_WINE_PREFIX, ADOBE_WINE_NO_OFFLOAD=1 (virtual displays),
+# ADOBE_WINE_IM=1 (keep the ibus/fcitx input method).
 set -euo pipefail
 base="${ADOBE_WINE_HOME:-$HOME/.local/share/adobe-wine}"
 files="$base/runner/files"
@@ -38,6 +39,11 @@ export __GL_SHADER_DISK_CACHE=1 __GL_SHADER_DISK_CACHE_PATH="$base/cache/nvidia"
 export __GL_SHADER_DISK_CACHE_SKIP_CLEANUP=1
 mkdir -p "$base/cache/dxvk" "$base/cache/nvidia" "$WINE_GST_REGISTRY_DIR"
 
+# Keys go to Wine directly, not through the ibus/fcitx XIM bridge, which delays every
+# keystroke (laggy typing in text layers). Keyboard layout switching still works; set
+# ADOBE_WINE_IM=1 to keep the input method (needed only for CJK-style composed input).
+[[ -n "${ADOBE_WINE_IM:-}" ]] || export XMODIFIERS=@im=none
+
 # filedialog.dll (Open/Save dialogs) runs this helper to show the desktop's file chooser;
 # its calls are traced to %TEMP%\adobe-filedialog.log (small, only when dialogs open).
 export ADOBE_FILECHOOSER="$base/app/lib/filechooser.py"
@@ -56,7 +62,7 @@ if [[ -n "$exe" && "$exe" =~ ^[A-Za-z0-9_-]+$ ]]; then
     if [[ -n "${ADOBE_WINE_LOG:-}" && "$ADOBE_WINE_LOG" != - ]]; then
         mkdir -p "$(dirname "$ADOBE_WINE_LOG")"
         [[ -f "$ADOBE_WINE_LOG" ]] && mv -f "$ADOBE_WINE_LOG" "$ADOBE_WINE_LOG.1"
-        [[ "$WINEDEBUG" == -all ]] && export WINEDEBUG="-all,err+all,trace+xdnd"
+        [[ "$WINEDEBUG" == -all ]] && export WINEDEBUG="-all,err+all,trace+xdnd,trace+clipboard"
         exec >> "$ADOBE_WINE_LOG" 2>&1
     fi
     helper="$base/app/lib/wm_helper.py"

@@ -16,6 +16,9 @@ Fixes (source-level descriptions in patches/*.patch):
   winex11 let the window manager decorate windows under Mutter-based WMs again: Proton
           turns decorations off there, and Cinnamon's Muffin reports itself as "Mutter
           (Muffin)", so every window got Wine-drawn, Windows-style title bars.
+  win32u  menus drawn like the desktop's: disabled items in the theme's disabled colour
+          (not fixed grey with a white "engraved" shadow), the hot item filled with the
+          menu-highlight colour and keeping the menu text colour, roomier popup rows.
 """
 import hashlib
 import os
@@ -44,6 +47,14 @@ PATCHES = {
         'fa03c9c29de8af9eaf64ad9ddbc03954e1c10925c70072fee3cabd32db4ee02f', [
             (0x44d4c, 'e81ff1ffff', '31c00f1f00'),     # GetWindowStyleMasks: HasWindowManager("Mutter") -> 0
             (0x44f2e, 'e83defffff', '31c00f1f00'),     # set_mwm_hints: same check
+        ]),
+    'lib/wine/x86_64-unix/win32u.so': (
+        'cc68ef24f80d15ff4fc7df598910a1437b09f4a64dcca83594678dbebe75a1a8', [
+            (0x100b40, '7440', 'eb40'),                # draw_menu_item: grayed text, no emboss
+            (0x100bf4, '7424', 'eb24'),                # ... and its shortcut text
+            (0x100c90, 'bf0e000000', 'bf07000000'),    # hot item text: COLOR_MENUTEXT
+            (0x100ead, 'bf0d000000', 'bf1d000000'),    # hot item fill: COLOR_MENUHILIGHT
+            (0xff6be, '8d5004', '8d5008'),             # calc_menu_item_size: row = text + 8
         ]),
     'lib/wine/i386-windows/mshtml.dll': (
         'd33decb1d3790abe00e49d54800998692f25295a2d29bef46650d7659479b125', [

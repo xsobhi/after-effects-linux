@@ -1,0 +1,78 @@
+Subject: [PATCH] win32u: Draw menus with the desktop theme's colours.
+
+Disabled items were drawn in a fixed RGB(128,128,128) with a white copy offset by one
+pixel underneath (the Windows 95 "engraved" look), whatever the colour scheme; on dark
+themes that is a white smear. Keep COLOR_GRAYTEXT instead. With flat menus, fill the hot
+item with COLOR_MENUHILIGHT (the inner fill was immediately painted over with
+COLOR_HIGHLIGHT) and keep COLOR_MENUTEXT on it, so a theme can use a subtle hover as GTK
+themes do. Give popup rows 4 more pixels.
+
+Applied to the Proton-CachyOS 11.0 build as a binary patch by lib/patch_runner.py.
+---
+--- a/dlls/win32u/menu.c	2026-10-01 14:09:08.158779254 +0300
++++ b/dlls/win32u/menu.c	2026-10-01 14:09:08.168827469 +0300
+@@ -2134,7 +2134,7 @@
+                 item->xTab += txt_width;
+             }
+             item->rect.right += 2 + txt_width;
+-            item_height = max( item_height, max( txt_height + 2, menucharsize.cy + 4 ));
++            item_height = max( item_height, max( txt_height + 2, menucharsize.cy + 8 ));
+         }
+         if (prev_font) NtGdiSelectFont( hdc, prev_font );
+     }
+@@ -2428,7 +2428,7 @@
+             if (item->fState & MF_GRAYED)
+                 NtGdiGetAndSetDCDword( hdc, NtGdiSetTextColor, get_sys_color( COLOR_GRAYTEXT ), NULL );
+             else
+-                NtGdiGetAndSetDCDword( hdc, NtGdiSetTextColor, get_sys_color( COLOR_HIGHLIGHTTEXT ), NULL );
++                NtGdiGetAndSetDCDword( hdc, NtGdiSetTextColor, get_sys_color( COLOR_MENUTEXT ), NULL );
+             NtGdiGetAndSetDCDword( hdc, NtGdiSetBkColor, get_sys_color( COLOR_HIGHLIGHT ), NULL );
+         }
+     }
+@@ -2502,7 +2502,7 @@
+             InflateRect (&rect, -1, -1);
+             fill_rect( hdc, &rect, get_sys_color_brush( COLOR_MENUHILIGHT ));
+             InflateRect (&rect, 1, 1);
+-            fill_rect( hdc, &rect, get_sys_color_brush( COLOR_HIGHLIGHT ));
++            fill_rect( hdc, &rect, get_sys_color_brush( COLOR_MENUHILIGHT ));
+         }
+         else
+         {
+@@ -2678,18 +2678,7 @@
+             if ((item->text[i] == '\t') || (item->text[i] == '\b'))
+                 break;
+ 
+-        if (item->fState & MF_GRAYED)
+-        {
+-            if (!(item->fState & MF_HILITE) )
+-            {
+-                ++rect.left; ++rect.top; ++rect.right; ++rect.bottom;
+-                NtGdiGetAndSetDCDword( hdc, NtGdiSetTextColor, RGB(0xff, 0xff, 0xff), NULL );
+-                DrawTextW( hdc, item->text, i, &rect, format );
+-                --rect.left; --rect.top; --rect.right; --rect.bottom;
+-            }
+-            NtGdiGetAndSetDCDword( hdc, NtGdiSetTextColor, RGB(0x80, 0x80, 0x80), NULL );
+-        }
+-
++        /* grayed items keep COLOR_GRAYTEXT from above: no fixed grey, no white emboss */
+         DrawTextW( hdc, item->text, i, &rect, format );
+ 
+         /* paint the shortcut text */
+@@ -2706,17 +2695,6 @@
+                 format = DT_RIGHT | DT_VCENTER | DT_SINGLELINE;
+             }
+ 
+-            if (item->fState & MF_GRAYED)
+-            {
+-                if (!(item->fState & MF_HILITE) )
+-                {
+-                    ++rect.left; ++rect.top; ++rect.right; ++rect.bottom;
+-                    NtGdiGetAndSetDCDword( hdc, NtGdiSetTextColor, RGB(0xff, 0xff, 0xff), NULL );
+-                    DrawTextW( hdc, item->text + i + 1, -1, &rect, format );
+-                    --rect.left; --rect.top; --rect.right; --rect.bottom;
+-                }
+-                NtGdiGetAndSetDCDword( hdc, NtGdiSetTextColor, RGB(0x80, 0x80, 0x80), NULL );
+-            }
+             DrawTextW( hdc, item->text + i + 1, -1, &rect, format );
+         }
+ 

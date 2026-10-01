@@ -21,6 +21,9 @@ starting or signing in fixed.
 | Desktop, Documents, … are empty folders inside the prefix | Linked to your real folders |
 | Windows-XP-looking menus, dialogs and title bars | Colours, fonts and font smoothing taken from your GTK theme; dark title bars with dark themes |
 | Windows-style title bar buttons under Cinnamon/GNOME | Proton turns window-manager decorations off under Mutter-based WMs (Muffin says "Mutter (Muffin)"); patched so the desktop draws real title bars ([0005](patches/0005-winex11-decorate-windows-under-Mutter.patch)) |
+| Jagged buttons, radio buttons, knobs and graph-editor curves | Adobe's UI draws through GDI+ with anti-aliasing on, which Wine's GDI+ ignores; Microsoft's GDI+ is installed instead (only the ~70 MB of Microsoft's Windows 7 SP1 package that hold it are downloaded, then checked by SHA-256) |
+| Menus: greyed items with a white "engraved" shadow, blue hover | Menus drawn with the theme's menu colours, GTK-style hover and roomier rows ([0006](patches/0006-win32u-draw-menus-with-the-theme-colours.patch)) |
+| Laggy typing, slow start of text editing | Keys go straight to Wine instead of through the ibus/fcitx XIM bridge (`ADOBE_WINE_IM=1` keeps it, for CJK input) |
 | Splash screen text panel boxed in a shadow | Compositor shadow turned off for borderless popups, as on Windows |
 | No CUDA / GPU sniffing confusion | DXVK, vkd3d-proton, DXVK-NVAPI and NVIDIA's CUDA/NVENC bridges from Proton-CachyOS |
 

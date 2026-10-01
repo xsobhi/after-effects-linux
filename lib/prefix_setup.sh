@@ -5,6 +5,8 @@
 source "$LIB_DIR/gpu_libs.sh"
 # shellcheck source=vcruntime.sh
 source "$LIB_DIR/vcruntime.sh"
+# shellcheck source=gdiplus.sh
+source "$LIB_DIR/gdiplus.sh"
 
 run_winetricks() {  # run_winetricks PREFIX VERB...
     local wt="$CACHE_DIR/winetricks-$WINETRICKS_VERSION"
@@ -70,6 +72,7 @@ setup_prefix() {  # setup_prefix PREFIX
     reg=$(mktemp --suffix=.reg)
     printf 'Windows Registry Editor Version 5.00\r\n' > "$reg"
     install_vcruntime "$pfx" "$reg"
+    install_gdiplus "$pfx" "$reg"
     install_gpu_libs "$pfx" "$reg"
     install_filedialog "$pfx" "$reg"
     import_reg "$pfx" "$reg"

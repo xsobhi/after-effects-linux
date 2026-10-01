@@ -57,6 +57,16 @@ def parse_color(value, bg=(255, 255, 255)):
     return None
 
 
+def css_prop(css, selector, prop):
+    """PROP of the first rule whose selector list contains SELECTOR exactly."""
+    for m in re.finditer(r'([^{}]+)\{([^{}]*)\}', re.sub(r'/\*.*?\*/', '', css, flags=re.S)):
+        if selector in (sel.strip() for sel in m.group(1).split(',')):
+            value = re.search(r'(?:^|;)\s*' + re.escape(prop) + r'\s*:\s*([^;]+)', m.group(2))
+            if value:
+                return value.group(1).strip()
+    return ''
+
+
 def mix(a, b, t):
     return tuple(round(x + (y - x) * t) for x, y in zip(a, b))
 
@@ -80,6 +90,10 @@ def palette(css, dark_hint):
     disabled = get('insensitive_fg_color', mix(fg, bg, 0.5))
     edge = (255, 255, 255) if dark else (0, 0, 0)
     field = mix(bg, (0, 0, 0), 0.12) if dark else get('theme_base_color', (255, 255, 255))
+    # Menus as GTK draws them: own bar/popup backgrounds and a subtle hover, not the accent.
+    menu_bg = parse_color(css_prop(css, 'menu', 'background-color'), bg) or bg
+    menubar_bg = parse_color(css_prop(css, 'menubar', 'background-color'), bg) or bg
+    menu_hover = parse_color(css_prop(css, 'menu menuitem:hover', 'background-color'), menu_bg) or accent
     colors = {
         'Background': wm_bg, 'AppWorkSpace': wm_bg_inactive, 'Window': field,
         'WindowText': fg, 'WindowFrame': wm_border, 'ButtonFace': bg, 'ButtonText': fg,
@@ -87,7 +101,7 @@ def palette(css, dark_hint):
         'ButtonLight': mix(bg, edge, 0.05), 'ButtonShadow': border,
         'ButtonDkShadow': mix(border, (0, 0, 0), 0.25), 'GrayText': disabled,
         'Hilight': accent, 'HilightText': sel_fg, 'HotTrackingColor': accent,
-        'Menu': bg, 'MenuBar': bg, 'MenuText': fg, 'MenuHilight': accent,
+        'Menu': menu_bg, 'MenuBar': menubar_bg, 'MenuText': fg, 'MenuHilight': menu_hover,
         'Scrollbar': mix(bg, (0, 0, 0), 0.08), 'InfoWindow': mix(bg, (0, 0, 0), 0.35),
         'InfoText': fg, 'ActiveTitle': wm_bg, 'GradientActiveTitle': wm_bg,
         'InactiveTitle': wm_bg_inactive, 'GradientInactiveTitle': wm_bg_inactive,
@@ -143,7 +157,8 @@ def build(out_path):
         lines.append(f'"{key}"={reg_hex(logfont(face, height))}')
     for key in ('CaptionFont', 'SmCaptionFont'):
         lines.append(f'"{key}"={reg_hex(logfont(title_face, height, title_weight))}')
-    lines += ['"MenuHeight"="-330"',
+    # Menu bar row like GTK's (text line + 4px padding top and bottom), in twips.
+    lines += [f'"MenuHeight"="-{(round(size * 96 / 72 * 1.2) + 9) * 15}"',
               '', '[HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\ThemeManager]',
               '"ThemeActive"="0"',
               '', '[HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize]',
