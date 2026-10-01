@@ -17,6 +17,7 @@ HRESULT fd_create(BOOL save, REFIID riid, void **out)
                       : (FOS_PATHMUSTEXIST | FOS_FILEMUSTEXIST);
     InterlockedIncrement(&fd_objects);
     hr = fd_QueryInterface(&d->vtbl, riid, out);
+    fd_log("create %s %s -> %#lx", save ? "save" : "open", fd_guid(riid), hr);
     fd_Release(&d->vtbl);
     return hr;
 }

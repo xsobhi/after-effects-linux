@@ -181,6 +181,7 @@ HRESULT STDMETHODCALLTYPE fd_Show(void *iface, HWND owner)
     for (tries = 0; tries < 5; tries++) {
         BOOL rejected = FALSE;
         response = run_portal(d, owner);
+        fd_log("Show: portal response %d, %d result(s)", response, d->nresults);
         if (response == 2) return fd_show_wine(d, owner);
         if (response != 0) return HRESULT_FROM_WIN32(ERROR_CANCELLED);
         for (i = 0; i < FD_MAX_SINKS; i++)  /* let the app validate, as Windows does */

@@ -27,6 +27,7 @@ static HRESULT add(void *iface, DWORD id, enum ctl_type type, LPCWSTR label, BOO
 {
     struct dialog *d = fd_from_cust(iface);
     struct control *c;
+    fd_log("add control %lu type %d (%d so far)", id, type, d->ncontrols);
     if (fd_control(d, id)) return E_INVALIDARG;
     if (d->ncontrols >= FD_MAX_CONTROLS) return E_OUTOFMEMORY;
     c = &d->controls[d->ncontrols++];
@@ -62,7 +63,7 @@ static HRESULT STDMETHODCALLTYPE AddEditBox(void *iface, DWORD id, LPCWSTR text)
 }
 
 #define CONTROL(var) struct control *var = fd_control(fd_from_cust(iface), id); \
-    if (!var) return E_INVALIDARG;
+    if (!var) { fd_log("%s: no control %lu", __func__, id); return E_INVALIDARG; }
 
 static HRESULT STDMETHODCALLTYPE SetControlLabel(void *iface, DWORD id, LPCWSTR l)
 { CONTROL(c) fd_setstr(&c->label, l); return S_OK; }
@@ -82,6 +83,7 @@ static HRESULT STDMETHODCALLTYPE SetCheckButtonState(void *iface, DWORD id, BOOL
 static HRESULT STDMETHODCALLTYPE AddControlItem(void *iface, DWORD id, DWORD item, LPCWSTR l)
 {
     CONTROL(c)
+    fd_log("AddControlItem %lu item %lu (%d so far)", id, item, c->nitems);
     if (c->nitems >= FD_MAX_ITEMS) return E_OUTOFMEMORY;
     c->items[c->nitems].id = item;
     c->items[c->nitems++].label = fd_strdup(l ? l : L"");

@@ -65,6 +65,8 @@ class Helper:
         if not self.matches(win):
             if depth < 2:
                 try:
+                    # A WM frame: also hear about the app window it holds being mapped later.
+                    win.change_attributes(event_mask=X.SubstructureNotifyMask)
                     kids = win.query_tree().children
                 except error.XError:
                     return
@@ -96,8 +98,8 @@ class Helper:
             if self.parent and not os.path.exists(f'/proc/{self.parent}'):
                 return
             # Wait for X events without busy-looping; wake every 2 s to check the parent.
-            if not self.d.pending_events():
-                select.select([self.d.fileno()], [], [], 2.0)
+            if not self.d.pending_events() and not select.select([self.d.fileno()], [], [], 2.0)[0]:
+                self.scan()                 # quiet for 2 s: catch anything the events missed
             while self.d.pending_events():
                 event = self.d.next_event()
                 if event.type == X.MapNotify:

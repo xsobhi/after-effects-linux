@@ -14,9 +14,9 @@
 #include <shobjidl.h>
 #include <shlobj.h>
 
-#define FD_MAX_CONTROLS 48
-#define FD_MAX_ITEMS 48
-#define FD_MAX_SINKS 8
+#define FD_MAX_CONTROLS 96
+#define FD_MAX_ITEMS 128
+#define FD_MAX_SINKS 16
 
 enum ctl_type { CTL_CHECK, CTL_COMBO, CTL_RADIO, CTL_MENU, CTL_TEXT, CTL_EDIT,
                 CTL_BUTTON, CTL_SEPARATOR };
@@ -71,6 +71,8 @@ HRESULT STDMETHODCALLTYPE fd_Show(void *iface, HWND owner);
 HRESULT fd_show_wine(struct dialog *d, HWND owner);
 
 /* util.c */
+void fd_log(const char *fmt, ...);
+const char *fd_guid(REFGUID g);
 WCHAR *fd_strdup(const WCHAR *s);
 void fd_setstr(WCHAR **dst, const WCHAR *src);
 WCHAR *fd_cotask_strdup(const WCHAR *s);

@@ -38,8 +38,10 @@ export __GL_SHADER_DISK_CACHE=1 __GL_SHADER_DISK_CACHE_PATH="$base/cache/nvidia"
 export __GL_SHADER_DISK_CACHE_SKIP_CLEANUP=1
 mkdir -p "$base/cache/dxvk" "$base/cache/nvidia" "$WINE_GST_REGISTRY_DIR"
 
-# filedialog.dll (Open/Save dialogs) runs this helper to show the desktop's file chooser.
+# filedialog.dll (Open/Save dialogs) runs this helper to show the desktop's file chooser;
+# its calls are traced to %TEMP%\adobe-filedialog.log (small, only when dialogs open).
 export ADOBE_FILECHOOSER="$base/app/lib/filechooser.py"
+export ADOBE_FILEDIALOG_LOG="${ADOBE_FILEDIALOG_LOG:-1}"
 
 # Proton names every X11 window "steam_proton" unless SteamAppId is set; give each
 # Adobe app its own WM_CLASS (steam_app_<Exe>) so the desktop matches it to its launcher.
@@ -49,6 +51,14 @@ exe="${exe%.[eE][xX][eE]}"
 exe="${exe// /}"
 if [[ -n "$exe" && "$exe" =~ ^[A-Za-z0-9_-]+$ ]]; then
     export SteamAppId="$exe"
+    # App start scripts set ADOBE_WINE_LOG: Wine errors and drag-and-drop events go there.
+    # (Not for plain commands: tools read the output of cmd, reg, winepath, ...)
+    if [[ -n "${ADOBE_WINE_LOG:-}" && "$ADOBE_WINE_LOG" != - ]]; then
+        mkdir -p "$(dirname "$ADOBE_WINE_LOG")"
+        [[ -f "$ADOBE_WINE_LOG" ]] && mv -f "$ADOBE_WINE_LOG" "$ADOBE_WINE_LOG.1"
+        [[ "$WINEDEBUG" == -all ]] && export WINEDEBUG="-all,err+all,trace+xdnd"
+        exec >> "$ADOBE_WINE_LOG" 2>&1
+    fi
     helper="$base/app/lib/wm_helper.py"
     if [[ -n "${DISPLAY:-}" && -f "$helper" ]]; then
         # Dark title bars + no shadows on borderless popups (see wm_helper.py).

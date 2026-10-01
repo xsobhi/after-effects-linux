@@ -25,6 +25,7 @@ for a in "$@"; do
     args+=("$a")
 done
 cd "$(dirname "$exe")"
+export ADOBE_WINE_LOG="${{ADOBE_WINE_LOG:-$HOME/.local/share/adobe-wine/logs/{slug}.log}}"
 ADOBE_WINE_PREFIX={prefix!r} exec "$HOME/.local/bin/adobe-wine" "$exe" "${{args[@]}}"
 '''
 
@@ -101,7 +102,8 @@ def install(app):
     script = os.path.join(BIN, slug(name))
     os.makedirs(BIN, exist_ok=True); os.makedirs(ICONS, exist_ok=True)
     with open(script, 'w') as f:
-        f.write(WRAPPER.format(name=name, version=app['version'], exe=app['exe'], prefix=app['prefix']))
+        f.write(WRAPPER.format(name=name, version=app['version'], exe=app['exe'], prefix=app['prefix'],
+                                slug=slug(name)))
     os.chmod(script, 0o755)
     icon = extract_icon(app['exe'], os.path.join(ICONS, 'adobe-wine-' + slug(name))) or 'applications-multimedia'
     exe_class = os.path.splitext(os.path.basename(app['exe']))[0].replace(' ', '')

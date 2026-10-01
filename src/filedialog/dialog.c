@@ -12,8 +12,10 @@ HRESULT STDMETHODCALLTYPE fd_QueryInterface(void *iface, REFIID riid, void **out
         *out = &d->vtbl;
     else if (IsEqualIID(riid, &IID_IFileDialogCustomize))
         *out = &d->cust_vtbl;
-    else
+    else {
+        fd_log("QueryInterface %s -> E_NOINTERFACE", fd_guid(riid));
         return E_NOINTERFACE;
+    }
     fd_AddRef(&d->vtbl);
     return S_OK;
 }
@@ -50,6 +52,7 @@ HRESULT STDMETHODCALLTYPE fd_SetFileTypes(void *iface, UINT n, const COMDLG_FILT
 {
     struct dialog *d = fd_from_iface(iface);
     UINT i;
+    fd_log("SetFileTypes %u%s", n, d->filters ? " (again)" : "");
     if (!specs || !n) return E_INVALIDARG;
     if (d->filters) return E_UNEXPECTED;    /* Windows allows this only once */
     if (!(d->filters = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, n * sizeof(*specs))))
@@ -80,6 +83,7 @@ HRESULT STDMETHODCALLTYPE fd_Advise(void *iface, IFileDialogEvents *sink, DWORD 
 {
     struct dialog *d = fd_from_iface(iface);
     DWORD i;
+    fd_log("Advise %p", sink);
     if (!sink || !cookie) return E_INVALIDARG;
     for (i = 0; i < FD_MAX_SINKS; i++)
         if (!d->sinks[i]) {
@@ -102,6 +106,7 @@ HRESULT STDMETHODCALLTYPE fd_Unadvise(void *iface, DWORD cookie)
 
 HRESULT STDMETHODCALLTYPE fd_SetOptions(void *iface, FILEOPENDIALOGOPTIONS opts)
 {
+    fd_log("SetOptions %#lx", (unsigned long)opts);
     fd_from_iface(iface)->options = opts;
     return S_OK;
 }

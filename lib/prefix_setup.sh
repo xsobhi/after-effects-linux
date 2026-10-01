@@ -72,19 +72,17 @@ setup_prefix() {  # setup_prefix PREFIX
     install_vcruntime "$pfx" "$reg"
     install_gpu_libs "$pfx" "$reg"
     install_filedialog "$pfx" "$reg"
-    printf '\r\n[HKEY_CURRENT_USER\\Environment]\r\n' >> "$reg"
-    printf '"TEMP"=hex(2):%s\r\n"TMP"=hex(2):%s\r\n' "$(reg_expand_sz '%USERPROFILE%\AppData\Local\Temp')" \
-        "$(reg_expand_sz '%USERPROFILE%\AppData\Local\Temp')" >> "$reg"
     import_reg "$pfx" "$reg"
+    # TEMP must stay an expandable string (Proton's user is "steamuser"; adopted prefixes may
+    # point at another profile). Wine's regedit misreads hex(2) in UTF-8 .reg files, so use reg.
+    for v in TEMP TMP; do
+        wine_in "$pfx" reg add 'HKCU\Environment' /v "$v" /t REG_EXPAND_SZ \
+            /d '%USERPROFILE%\AppData\Local\Temp' /f >/dev/null 2>&1
+    done
     stop_prefix "$pfx"
     rm -f "$reg"
     say "Matching the desktop theme, fonts and folders"
     apply_theme "$pfx"
     "$LIB_DIR/user_folders.sh" "$pfx"
     gecko_prefs "$pfx"
-}
-
-reg_expand_sz() {  # REG_EXPAND_SZ value as .reg hex(2) bytes (UTF-16LE, NUL-terminated)
-    printf '%s' "$1" | iconv -f UTF-8 -t UTF-16LE | od -An -v -tx1 |
-        tr -s ' \n' ',' | sed 's/^,//; s/,$/,00,00/'
 }

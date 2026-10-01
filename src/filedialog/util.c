@@ -1,5 +1,48 @@
-/* String, path and process helpers for filedialog.dll. */
+/* String, path, logging and process helpers for filedialog.dll. */
 #include "fd.h"
+#include <stdarg.h>
+#include <stdio.h>
+
+/* Set ADOBE_FILEDIALOG_LOG=1 (or to a Windows file path) to trace calls to
+ * %TEMP%\adobe-filedialog.log. */
+void fd_log(const char *fmt, ...)
+{
+    static int enabled = -1;
+    static WCHAR path[MAX_PATH];
+    char buf[1024];
+    va_list args;
+    HANDLE f;
+    DWORD n;
+    if (enabled == -1) {
+        WCHAR env[MAX_PATH];
+        enabled = GetEnvironmentVariableW(L"ADOBE_FILEDIALOG_LOG", env, MAX_PATH) > 0;
+        if (enabled && (env[0] == '1' && !env[1])) {
+            GetTempPathW(MAX_PATH, path);
+            lstrcatW(path, L"adobe-filedialog.log");
+        } else if (enabled) lstrcpynW(path, env, MAX_PATH);
+    }
+    if (!enabled) return;
+    va_start(args, fmt);
+    n = vsnprintf(buf, sizeof(buf) - 2, fmt, args);
+    va_end(args);
+    if (n > sizeof(buf) - 2) n = sizeof(buf) - 2;
+    buf[n++] = '\n';
+    f = CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_ALWAYS, 0, NULL);
+    if (f == INVALID_HANDLE_VALUE) return;
+    WriteFile(f, buf, n, &n, NULL);
+    CloseHandle(f);
+}
+
+const char *fd_guid(REFGUID g)
+{
+    static char buf[4][40];
+    static int i;
+    char *b = buf[i++ & 3];
+    snprintf(b, 40, "{%08lx-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x}", (unsigned long)g->Data1,
+             g->Data2, g->Data3, g->Data4[0], g->Data4[1], g->Data4[2], g->Data4[3], g->Data4[4],
+             g->Data4[5], g->Data4[6], g->Data4[7]);
+    return b;
+}
 
 typedef char *(CDECL *unix_name_fn)(const WCHAR *dos);
 typedef WCHAR *(CDECL *dos_name_fn)(const char *unix_path);

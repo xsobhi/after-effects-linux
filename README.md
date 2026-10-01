@@ -20,6 +20,7 @@ starting or signing in fixed.
 | Open/Save/Import show Wine's old dialog inside the prefix | `filedialog.dll` serves `IFileOpenDialog`/`IFileSaveDialog` with your desktop's own file chooser (xdg-desktop-portal), including AE's extra import options |
 | Desktop, Documents, … are empty folders inside the prefix | Linked to your real folders |
 | Windows-XP-looking menus, dialogs and title bars | Colours, fonts and font smoothing taken from your GTK theme; dark title bars with dark themes |
+| Windows-style title bar buttons under Cinnamon/GNOME | Proton turns window-manager decorations off under Mutter-based WMs (Muffin says "Mutter (Muffin)"); patched so the desktop draws real title bars ([0005](patches/0005-winex11-decorate-windows-under-Mutter.patch)) |
 | Splash screen text panel boxed in a shadow | Compositor shadow turned off for borderless popups, as on Windows |
 | No CUDA / GPU sniffing confusion | DXVK, vkd3d-proton, DXVK-NVAPI and NVIDIA's CUDA/NVENC bridges from Proton-CachyOS |
 
@@ -81,6 +82,14 @@ adobe-wine PROGRAM.exe           run anything in the Adobe prefix (winecfg, rege
 - On hybrid-GPU laptops, plug in: battery power-saving profiles throttle the CPU and GPU
   hard, which shows up as stutter in the timeline.
 - Text is rendered by FreeType, so it looks slightly different from Windows ClearType.
+
+## Troubleshooting
+
+- Apps started from the menu log Wine errors and drag-and-drop events to
+  `~/.local/share/adobe-wine/logs/<app>.log` (previous run: `.log.1`); `ADOBE_WINE_LOG=-` turns it off.
+- Open/Save dialog calls are traced to `C:\users\steamuser\AppData\Local\Temp\adobe-filedialog.log`
+  inside the prefix.
+- `ae-linux verify` shows any Adobe file that no longer matches Adobe's signature.
 
 ## Uninstall
 

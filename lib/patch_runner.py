@@ -13,6 +13,9 @@ Fixes (source-level descriptions in patches/*.patch):
   mshtml  queryCommandSupported returns FALSE instead of E_NOTIMPL; <!DOCTYPE> pages
           default to IE11 mode (what FEATURE_BROWSER_EMULATION=11001 asks for); and
           location.port is "" for default ports. Needed by Adobe's sign-in page.
+  winex11 let the window manager decorate windows under Mutter-based WMs again: Proton
+          turns decorations off there, and Cinnamon's Muffin reports itself as "Mutter
+          (Muffin)", so every window got Wine-drawn, Windows-style title bars.
 """
 import hashlib
 import os
@@ -36,6 +39,11 @@ PATCHES = {
             (0x83d89, '0f8581000000', '660f1f440000'),
             (0x83de0, '448b4ddc488d75e0', 'e92b000000909090'),
             (0x83e10, '488d41d848895424284c8d0d26930d00b90300000048894424204c8d05af301100488d15', CAVE64),
+        ]),
+    'lib/wine/x86_64-unix/winex11.so': (
+        'fa03c9c29de8af9eaf64ad9ddbc03954e1c10925c70072fee3cabd32db4ee02f', [
+            (0x44d4c, 'e81ff1ffff', '31c00f1f00'),     # GetWindowStyleMasks: HasWindowManager("Mutter") -> 0
+            (0x44f2e, 'e83defffff', '31c00f1f00'),     # set_mwm_hints: same check
         ]),
     'lib/wine/i386-windows/mshtml.dll': (
         'd33decb1d3790abe00e49d54800998692f25295a2d29bef46650d7659479b125', [

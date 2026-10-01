@@ -1,0 +1,18 @@
+Subject: [PATCH] winex11: Let Mutter-based window managers decorate windows.
+
+Proton disables window-manager decorations whenever the WM name contains "Mutter".
+Cinnamon's Muffin reports "Mutter (Muffin)", so desktop apps (Adobe After Effects)
+got Wine-drawn, Windows-style title bars and buttons instead of the desktop theme's.
+Applies to Proton-CachyOS (wine-cachyos cachyos_11.0_20260702), not upstream Wine.
+---
+--- a/dlls/winex11.drv/window.c
++++ b/dlls/winex11.drv/window.c
+@@ -534,8 +534,6 @@ static unsigned long get_mwm_decorations_for_style( DWORD style, DWORD ex_style )
+ {
+     unsigned long ret = 0;
+ 
+-    if (X11DRV_HasWindowManager( "Mutter" )) return 0;
+-
+     if (ex_style & WS_EX_TOOLWINDOW) return 0;
+     if (ex_style & WS_EX_LAYERED) return 0;
+ 
