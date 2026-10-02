@@ -70,6 +70,13 @@ Double-click **After Effects Linux Setup**: it searches `~/.wine`, Bottles, Lutr
 Heroic, PlayOnLinux and Steam compatdata, lists what it found (version, tested or
 experimental, files genuine or modified), and sets up the ones you tick.
 
+### Plugins and other Windows installers
+
+Double-click any `.exe`, `.msi`, `.lnk` or `.bat` in your file manager: it runs in the Adobe
+prefix with the patched runner (`adobe-wine-open FILE` does the same from a terminal), so plugin
+installers find After Effects through its registry entries and install where it looks. Each
+run is logged to `~/.local/share/adobe-wine/logs/open-<name>.log`.
+
 ## Commands
 
 ```
@@ -94,6 +101,8 @@ adobe-wine PROGRAM.exe           run anything in the Adobe prefix (winecfg, rege
 - Open/Save dialog calls are traced to `C:\users\steamuser\AppData\Local\Temp\adobe-filedialog.log`
   inside the prefix.
 - `ae-linux verify` shows any Adobe file that no longer matches Adobe's signature.
+- Something slow? Run `dev/ae-profile.sh 15` and repeat the slow action for 15 seconds: it
+  prints CPU per thread and where the app's main thread spends its time (stack samples).
 
 ## Uninstall
 

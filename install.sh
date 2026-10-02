@@ -48,7 +48,7 @@ fi
 rm -rf "$APP_DIR"
 mv "$APP_DIR.new" "$APP_DIR"
 mkdir -p "$BIN_DIR" "$APPS_DIR"
-for b in adobe-wine ae-linux ae-linux-gui; do ln -sf "$APP_DIR/bin/$b" "$BIN_DIR/$b"; done
+for b in adobe-wine adobe-wine-open ae-linux ae-linux-gui; do ln -sf "$APP_DIR/bin/$b" "$BIN_DIR/$b"; done
 cat > "$APPS_DIR/ae-linux-setup.desktop" <<EOF
 [Desktop Entry]
 Type=Application

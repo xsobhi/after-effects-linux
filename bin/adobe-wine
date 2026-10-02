@@ -54,8 +54,8 @@ export ADOBE_FILEDIALOG_LOG="${ADOBE_FILEDIALOG_LOG:-1}"
 exe="${1:-}"
 exe="${exe##*[\\/]}"
 exe="${exe%.[eE][xX][eE]}"
-exe="${exe// /}"
-if [[ -n "$exe" && "$exe" =~ ^[A-Za-z0-9_-]+$ ]]; then
+exe="${exe//[^A-Za-z0-9_-]/}"
+if [[ -n "$exe" ]]; then
     export SteamAppId="$exe"
     # App start scripts set ADOBE_WINE_LOG: Wine errors and drag-and-drop events go there.
     # (Not for plain commands: tools read the output of cmd, reg, winepath, ...)

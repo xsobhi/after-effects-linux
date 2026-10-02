@@ -8,7 +8,7 @@ LIB_DIR=$(dirname "$(readlink -f "$0")")/lib
 source "$LIB_DIR/common.sh"
 data=${XDG_DATA_HOME:-$HOME/.local/share}
 
-for b in adobe-wine ae-linux ae-linux-gui; do
+for b in adobe-wine adobe-wine-open ae-linux ae-linux-gui; do
     [[ -L "$BIN_DIR/$b" ]] && rm -f "$BIN_DIR/$b"
 done
 for f in "$APPS_DIR"/adobe-wine-*.desktop; do

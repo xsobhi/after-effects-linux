@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Open a Windows program, installer or shortcut from the file manager in the Adobe Wine
+# prefix, so plugin installers put their files where the Adobe apps look for them.
+#   adobe-wine-open FILE.exe|.msi|.lnk|.bat [ARGS...]
+# The desktop's default handler for those file types (set up by `ae-linux setup`).
+set -euo pipefail
+if [[ $# -lt 1 || ! -e "$1" ]]; then
+    printf 'usage: %s FILE.exe|.msi|.lnk|.bat [ARGS...]\n' "${0##*/}" >&2
+    exit 2
+fi
+file=$(readlink -f "$1")
+name=$(basename "$file")
+wine="$(dirname "$(readlink -f "$0")")/adobe-wine"
+# Installers log like the app launchers do: ~/.local/share/adobe-wine/logs/open-<name>.log
+export ADOBE_WINE_LOG="${ADOBE_WINE_LOG:-$HOME/.local/share/adobe-wine/logs/open-${name%.*}.log}"
+cd "$(dirname "$file")"
+case "${name,,}" in
+    *.msi)            exec "$wine" msiexec /i "$file" "${@:2}" ;;
+    *.lnk|*.bat|*.cmd) exec "$wine" start /unix "$file" "${@:2}" ;;
+    *)                exec "$wine" "$file" "${@:2}" ;;
+esac

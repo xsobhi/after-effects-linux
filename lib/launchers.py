@@ -15,6 +15,11 @@ HOME = os.path.expanduser('~')
 DATA = os.environ.get('XDG_DATA_HOME', os.path.join(HOME, '.local', 'share'))
 BIN = os.path.join(HOME, '.local', 'bin')
 ICONS = os.path.join(DATA, 'icons', 'hicolor', '256x256', 'apps')
+# Windows programs, installers and shortcuts: double-clicking one runs it in the Adobe prefix,
+# so plugin installers put their files where the Adobe apps look for them.
+EXE_TYPES = ['application/x-msdownload', 'application/vnd.microsoft.portable-executable',
+             'application/x-ms-dos-executable', 'application/x-msi', 'application/x-ms-shortcut',
+             'application/x-bat']
 MIME = {'After Effects': ('application/x-adobe-aftereffects-project', 'After Effects project', ['*.aep', '*.aet'])}
 WRAPPER = '''#!/usr/bin/env bash
 # Start {name} ({version}) in its Wine prefix; Linux file paths become Windows paths.
@@ -123,6 +128,19 @@ def install(app):
     print(f'  {name}: menu entry + {script}')
 
 
+def install_exe_handler():
+    path = os.path.join(DATA, 'applications', 'adobe-wine-open.desktop')
+    entry = ['[Desktop Entry]', 'Type=Application', 'Name=Windows Program (Adobe Wine)',
+             'Comment=Run Windows programs and installers in the Adobe Wine prefix',
+             f'Exec="{os.path.join(BIN, "adobe-wine-open")}" %f',
+             'Icon=application-x-ms-dos-executable', 'Terminal=false', 'NoDisplay=true',
+             'StartupNotify=true', 'MimeType=' + ';'.join(EXE_TYPES) + ';']
+    with open(path, 'w') as f:
+        f.write('\n'.join(entry) + '\n')
+    subprocess.run(['xdg-mime', 'default', os.path.basename(path)] + EXE_TYPES, check=False)
+    print('  .exe/.msi/.lnk/.bat files now open in the Adobe prefix')
+
+
 def install_mime(mtype, comment, globs):
     pkg = os.path.join(DATA, 'mime', 'packages')
     os.makedirs(pkg, exist_ok=True)
@@ -137,6 +155,7 @@ def install_mime(mtype, comment, globs):
 if __name__ == '__main__':
     if len(sys.argv) != 2:
         sys.exit(__doc__)
+    install_exe_handler()
     with open(sys.argv[1]) as f:
         for app in json.load(f):
             if app['genuine']:
