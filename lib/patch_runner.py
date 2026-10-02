@@ -16,17 +16,12 @@ Fixes (source-level descriptions in patches/*.patch):
           setAttribute("on<event>", "code") in IE9+ document mode also sets a working
           event handler, as in IE (Wine only stored the text): Adobe's installers attach
           the Install/Continue button actions that way (code caves: src/runner-caves).
-  winex11 let the window manager decorate windows under Mutter-based WMs again: Proton
-          turns decorations off there, and Cinnamon's Muffin reports itself as "Mutter
-          (Muffin)", so every window got Wine-drawn, Windows-style title bars.
-          Also: OpenGL child windows (AE's viewer) render offscreen and are copied on
-          screen after each swap; without GLX_OML_sync_control (NVIDIA) the copy ran
-          before the asynchronous, vsynced swap finished and showed the previous frame.
-          Offscreen drawables now swap without vsync and glFinish before the copy
-          (helpers placed in the code segment's tail padding).
-  win32u  menus drawn like the desktop's: disabled items in the theme's disabled colour
-          (not fixed grey with a white "engraved" shadow), the hot item filled with the
-          menu-highlight colour and keeping the menu text colour, roomier popup rows.
+  winex11 the window manager decorates windows under Mutter-based WMs again (Proton turns
+          that off there; Muffin says "Mutter (Muffin)"). Offscreen OpenGL child windows
+          (AE's viewer) swap without vsync and glFinish before Wine copies them on screen:
+          without GLX_OML_sync_control (NVIDIA) the copy showed the previous frame.
+  win32u  menus in the theme's colours: disabled items without the white "engraved"
+          shadow, the hot item in the menu-highlight colour, roomier popup rows.
   cmd     DEL of a file that does not exist (or cannot be deleted) leaves ERRORLEVEL at
           0 as on Windows; Wine set 1, so installer scripts ending in a cleanup DEL
           "failed" (Maxon App: err.sys.script-execution-failed, preflight).
@@ -39,12 +34,15 @@ Fixes (source-level descriptions in patches/*.patch):
           text looked like Windows 98. Aliased (1-bit) text keeps full hinting.
   server  ACEs matching the current user set a folder's Unix write bits whatever its owner
           SID (Adobe installers made "caps" read-only in older prefixes: error 105).
+  crypt32 base64 text of a multiple of 48 bytes ends with one line break, not two (no NUL;
+          Red Giant licence requests failed and AME/AE hung loading Trapcode plugins).
 """
 import hashlib
 import os
 import shutil
 import sys
 
+from crypt32_caves import CRYPT32_64
 from mshtml_caves import ONEVENT32, ONEVENT64
 
 CAVE64 = ('448b4ddc4181f9bb0100000f849effffff4183f9500f8494ffffff488d75e0e9b4ffffff')
@@ -151,6 +149,7 @@ PATCHES = {
             (0x33d13, '0f85f7010000', 'e9f801000090'),  # sd_to_mode, deny ACE: skip owner check
             (0x33db4, '0f8516010000', 'e91701000090'),  # allow ACE: the same
         ]),
+    'lib/wine/x86_64-windows/crypt32.dll': CRYPT32_64,
 }
 HERE = os.path.dirname(os.path.abspath(__file__))
 

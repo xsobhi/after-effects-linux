@@ -1,0 +1,47 @@
+Subject: [PATCH] crypt32: End base64 text of a multiple of 48 bytes with one separator.
+
+CryptBinaryToString(CRYPT_STRING_BASE64, also with NOCR/NOCRLF) puts a separator after
+every 64-character line and one after the last block. When the input is a multiple of
+48 bytes the text ends with a full line, which then got the separator twice: once in
+the loop and once after it. Windows ends the text with a single separator, and that is
+also what the size query reserves room for:
+
+ - CryptBinaryToStringA: the extra separator took the place of the terminating NUL;
+   *pcchString was right, but the string was not terminated. Callers that use strlen()
+   picked up whatever followed in memory.
+ - CryptBinaryToStringW: lstrcpyW wrote the second separator and the NUL past the end
+   of the caller's buffer.
+
+Red Giant / Maxon's licence client (seen in Trapcode 3D Stroke; the other Red Giant
+plugins talk to the same service) base64-encodes its encrypted request with
+CryptBinaryToStringA and sends strlen() bytes over \\.\pipe\xfz_link. A 1152-byte
+request (24 x 48) arrived as base64 with trailing garbage, decoded to 1153 bytes, the
+Red Giant Service could not AES-decrypt it and never answered, and the plugin waited
+forever: Media Encoder 2020 hung at "Loading 3DStroke.aex" on start-up.
+
+Applied to the Proton-CachyOS 11.0 x86_64 crypt32.dll as a binary patch by
+lib/patch_runner.py (lib/crypt32_caves.py). For the inlined A encoder the binary skips
+the final separator instead of the in-loop one; the text is the same.
+---
+--- a/dlls/crypt32/base64.c	2026-10-02 18:44:37.557807471 +0300
++++ b/dlls/crypt32/base64.c	2026-10-02 18:44:37.571159068 +0300
+@@ -126,7 +126,8 @@
+         d += 3;
+         div--;
+ 
+-        if (i && i % 64 == 0)
++        /* the separator after the last full line is added below */
++        if (i && i % 64 == 0 && (div || pad_bytes))
+             ptr += stradd(ptr, end, sep, strlen(sep));
+     }
+ 
+@@ -408,7 +409,8 @@
+         d += 3;
+         div--;
+ 
+-        if (i && i % 64 == 0)
++        /* the separator after the last full line is added below */
++        if (i && i % 64 == 0 && (div || pad_bytes))
+         {
+             lstrcpyW(ptr, sep);
+             ptr += lstrlenW(sep);
