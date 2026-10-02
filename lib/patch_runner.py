@@ -33,6 +33,10 @@ Fixes (source-level descriptions in patches/*.patch):
           cmd /c SCRIPT.bat exits with the last command's exit code, not ERRORLEVEL, as on
           Windows: Red Giant preflight scripts end with ECHO after taskkill of a service
           that is not running (128), and Wine returned that 128 (Magic Bullet, Universe).
+  dwrite  Direct2D/DirectWrite text in the natural rendering modes (what D2D apps get
+          by default) is drawn with FreeType's light hinting and without embedded bitmaps,
+          like Windows' natural modes; Wine loaded glyphs with full TrueType hinting, so
+          text looked like Windows 98. Aliased (1-bit) text keeps full hinting.
 """
 import hashlib
 import os
@@ -89,6 +93,33 @@ PATCHES = {
             (0x100c90, 'bf0e000000', 'bf07000000'),    # hot item text: COLOR_MENUTEXT
             (0x100ead, 'bf0d000000', 'bf1d000000'),    # hot item fill: COLOR_MENUHILIGHT
             (0xff6be, '8d5004', '8d5008'),             # calc_menu_item_size: row = text + 8
+        ]),
+    'lib/wine/x86_64-unix/dwrite.so': (
+        '53c6bd6df0d517af6320819f9c138231ce876f35e38fa7ca13582996d75faa1e', [
+            # get_glyph_bitmap: FT_Load_Glyph flags from glyph_load_flags (both call sites)
+            (0x1be8, '31d28b730c', 'e853140000'),
+            (0x1c3d, '8b730cba08000000', 'e8021400000f1f00'),
+            # glyph_load_flags: edx = 0 or 8; unless mode == ALIASED: |= TARGET_LIGHT | NO_BITMAP
+            (0x3040, '00' * 27, '31d2eb07ba08000000eb008b730c837b1001740681ca08000100c3'),
+            # get_glyph_bbox: the same flags, so bitmaps fit their boxes (no mode passed here)
+            (0x2e76, '31d28b730c', 'e8e5010000'),
+            (0x2f47, '8b730cba08000000', 'e8140100000f1f00'),
+            (0x3060, '00' * 9, '8b730cba08000100c3'),          # mov esi,glyph; edx = 0x10008
+            (0x98, '3520000000000000', '6920000000000000'),   # code segment p_filesz
+            (0xa0, '3520000000000000', '6920000000000000'),   # ... and p_memsz
+        ]),
+    'lib/wine/i386-unix/dwrite.so': (
+        '2379143d6f8d8cd8d90eef75f890f5a13441518832e0079b9770ae273ac2cbd7', [
+            # same; the helpers take over the 'sub esp,4; push flags; push glyph' sequence
+            (0x1ad0, '83ec046a00ff760c', 'e83b1000000f1f00'),
+            (0x1b27, '83ec046a08ff760c', 'e8041000000f1f00'),
+            (0x2b10, '00' * 23, '5a83ec0431c0837e10017405b80800010050ff760cffe2'),
+            (0x2b30, '00' * 26, '5a83ec04b808000000837e10017405b80800010050ff760cffe2'),
+            (0x292b, '83ec046a00ff770c', 'e8200200000f1f00'),   # get_glyph_bbox
+            (0x2a16, '83ec046a08ff770c', 'e8350100000f1f00'),
+            (0x2b50, '00' * 14, '5a83ec046808000100ff770cffe2'),
+            (0x64, '041b0000', '5e1b0000'),
+            (0x68, '041b0000', '5e1b0000'),
         ]),
     'lib/wine/x86_64-windows/cmd.exe': (
         '51b46b725388d7b6036f2cab7f01d2bd2dc23327d26aea9a8839e9a3efd4bc1e', [

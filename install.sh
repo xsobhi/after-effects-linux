@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Install "After Effects on Linux": a patched Proton-CachyOS runner, the tools in bin/ and lib/,
-# then set up every Wine prefix holding a genuine After Effects / Media Encoder install
+# then set up every Wine prefix holding an After Effects / Media Encoder install
 # (or a fresh prefix to install into).
 #
 #   ./install.sh              install or update, then set up prefixes

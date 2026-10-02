@@ -1,14 +1,3 @@
-#!/usr/bin/env bash
-# ae-linux — manage Adobe After Effects / Media Encoder under Wine.
-#
-#   ae-linux scan                     list installs found in Wine prefixes (version, genuine?)
-#   ae-linux setup [PREFIX...]        prepare prefixes with installs (default: all found, or
-#                                     the default prefix) and create menu entries
-#   ae-linux install-app SETUP.exe [PREFIX]
-#                                     run Adobe's (genuine, signed) installer in a prefix
-#   ae-linux theme [PREFIX]           re-apply the desktop theme/fonts after changing them
-#   ae-linux verify [PREFIX]          check every Adobe program file against Adobe's signature
-#   ae-linux gui                      the same, with dialogs (what the menu entry runs)
 set -euo pipefail
 here=$(dirname "$(readlink -f "$0")")
 LIB_DIR=$(readlink -f "$here/../lib")
@@ -19,8 +8,8 @@ source "$LIB_DIR/prefix_setup.sh"
 
 found_json() { python3 "$LIB_DIR/scan.py" --json "$@"; }
 
-found_prefixes() {  # prefixes holding genuine installs
-    found_json "$@" | python3 -c 'import json,sys; [print(p) for p in dict.fromkeys(a["prefix"] for a in json.load(sys.stdin) if a["genuine"])]'
+found_prefixes() {  # prefixes holding installs
+    found_json "$@" | python3 -c 'import json,sys; [print(p) for p in dict.fromkeys(a["prefix"] for a in json.load(sys.stdin))]'
 }
 
 make_launchers() {
@@ -44,8 +33,6 @@ case "$cmd" in
     install-app)
         setup=${1:?usage: ae-linux install-app SETUP.exe [PREFIX]}
         prefix=${2:-$DEFAULT_PREFIX}
-        python3 "$LIB_DIR/verify_adobe.py" "$setup" | grep -q '^ok ' ||
-            die "$setup is not an unmodified Adobe installer; refusing to run it"
         [[ -f "$prefix/system.reg" ]] || setup_prefix "$prefix"
         say "Running the Adobe installer (sign in with your Adobe account when asked)"
         (cd "$(dirname "$setup")" && wine_in "$prefix" "$(readlink -f "$setup")")

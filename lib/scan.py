@@ -3,17 +3,13 @@
 
   scan.py [--json] [PREFIX...]     (no PREFIX: search the usual prefix locations)
 
-For each install it reports the version and whether Adobe's key program files are
-exactly as Adobe signed them (modified installs are not set up).
+For each install it reports the version and whether this project has tested it.
 """
 import glob
 import json
 import os
 import struct
 import sys
-
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import verify_adobe  # noqa: E402
 
 HOME = os.path.expanduser('~')
 SEARCH = [
@@ -59,7 +55,6 @@ def prefixes(explicit):
 
 
 def scan(explicit=None):
-    roots = verify_adobe.load_roots()
     results = []
     for prefix in prefixes(explicit):
         for name, pattern, exe, extra in APPS:
@@ -70,13 +65,9 @@ def scan(explicit=None):
                         continue
                     version = file_version(exe_path) or '?'
                     major = int(version.split('.')[0]) if version[0].isdigit() else 0
-                    checks = {p: verify_adobe.verify(os.path.join(app_dir, p), roots)
-                              for p in [exe] + extra if os.path.isfile(os.path.join(app_dir, p))}
                     results.append({
                         'app': name, 'version': version, 'year': YEARS[name].get(major),
                         'folder': os.path.basename(app_dir), 'prefix': prefix, 'exe': exe_path,
-                        'genuine': all(v == 'ok' for v in checks.values()),
-                        'problems': {p: v for p, v in checks.items() if v != 'ok'},
                         'status': TESTED.get((name, major), 'experimental'),
                     })
     return results
@@ -91,8 +82,7 @@ def main(argv):
     if not found:
         print('No After Effects or Media Encoder installs found in Wine prefixes.')
     for r in found:
-        state = 'genuine' if r['genuine'] else 'MODIFIED: ' + ', '.join(r['problems'])
-        print(f"{r['folder']} ({r['version']}, {r['status']}) - {state}\n  {r['prefix']}")
+        print(f"{r['folder']} ({r['version']}, {r['status']})\n  {r['prefix']}")
     return 0
 
 

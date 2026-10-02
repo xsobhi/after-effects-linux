@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Create menu entries, start scripts and file associations for Adobe apps found by scan.py.
 
-  launchers.py SCAN.json      (only genuine installs get launchers)
+  launchers.py SCAN.json
 """
 import io
 import json
@@ -158,6 +158,5 @@ if __name__ == '__main__':
     install_exe_handler()
     with open(sys.argv[1]) as f:
         for app in json.load(f):
-            if app['genuine']:
-                install(app)
+            install(app)
     subprocess.run(['update-desktop-database', os.path.join(DATA, 'applications')], check=False)

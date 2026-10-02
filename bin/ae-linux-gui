@@ -26,9 +26,8 @@ json=$(python3 "$lib/scan.py" --json)
 rows=$(printf '%s' "$json" | python3 -c '
 import json, sys
 for a in json.load(sys.stdin):
-    state = "genuine" if a["genuine"] else "MODIFIED — will not be set up"
-    print("TRUE" if a["genuine"] else "FALSE"); print(a["folder"]); print(a["version"])
-    print(a["status"]); print(state); print(a["prefix"])')
+    print("TRUE"); print(a["folder"]); print(a["version"])
+    print(a["status"]); print("available"); print(a["prefix"])")
 
 if [[ -z "$rows" ]]; then
     zenity --question --width=460 --title="$title" --ok-label="Choose installer…" --cancel-label="Close" \
@@ -48,12 +47,6 @@ choice=$(zenity --list --checklist --width=900 --height=360 --title="$title" \
 [[ -n "$choice" ]] || exit 0
 
 mapfile -t prefixes < <(printf '%s\n' "$choice" | sort -u)
-for p in "${prefixes[@]}"; do
-    if printf '%s' "$json" | python3 -c 'import json,sys; sys.exit(0 if any(a["prefix"]==sys.argv[1] and not a["genuine"] for a in json.load(sys.stdin)) else 1)' "$p"; then
-        zenity --warning --width=460 --title="$title" --text="$p contains Adobe files that were modified after Adobe signed them.\nOnly unmodified installs are supported; reinstall from Adobe and try again." 2>/dev/null
-        exit 1
-    fi
-done
 zenity --question --width=460 --title="$title" --ok-label="Set up" \
     --text="Set up these prefixes?\n\n$(printf '• %s\n' "${prefixes[@]}")\n\nApps in them are closed first." 2>/dev/null || exit 0
 run_with_progress "Setting up… (first run downloads fonts and runtimes)" "$here/ae-linux" setup "${prefixes[@]}" &&
