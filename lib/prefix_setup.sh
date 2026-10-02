@@ -26,6 +26,23 @@ install_filedialog() {  # install_filedialog PREFIX REG
     done >> "$reg"
 }
 
+link_runner_fonts() {  # link_runner_fonts PREFIX — what Proton's launcher script does
+    # Proton's Wine registers its bundled fonts (Tahoma, Marlett, Microsoft Sans Serif, MS
+    # Gothic, SimSun, ...) by file name, expecting them in C:\windows\Fonts, where the
+    # proton script normally symlinks them. Without them DirectWrite has no fallback font
+    # (D2D apps draw no text at all) and GDI+ cannot find Tahoma. Real files are kept, so
+    # Microsoft's core fonts (corefonts) win over Proton's metric-compatible copies.
+    local dir font fonts=$1/drive_c/windows/Fonts
+    mkdir -p "$fonts"
+    for dir in "$RUNNER_DIR/files/share/fonts" "$RUNNER_DIR/files/share/wine/fonts"; do
+        for font in "$dir"/*.ttf "$dir"/*.ttc; do
+            [[ -e "$font" ]] || continue
+            [[ -e "$fonts/${font##*/}" && ! -L "$fonts/${font##*/}" ]] && continue
+            ln -sfn "$font" "$fonts/${font##*/}"
+        done
+    done
+}
+
 msxml_progids() {  # msxml_progids PREFIX — version-independent MSXML names -> MSXML 3, as on Windows
     # Wine's builtin msxml2.dll claims Msxml2.DOMDocument & co. (MSXML 2.6 classes) on every
     # wineboot; with Microsoft's msxml3.dll those classes do not exist, so programs asking
@@ -107,6 +124,7 @@ setup_prefix() {  # setup_prefix PREFIX
     install_filedialog "$pfx" "$reg"
     import_reg "$pfx" "$reg"
     msxml_progids "$pfx"
+    link_runner_fonts "$pfx"
     # TEMP must stay an expandable string (Proton's user is "steamuser"; adopted prefixes may
     # point at another profile). Wine's regedit misreads hex(2) in UTF-8 .reg files, so use reg.
     for v in TEMP TMP; do
