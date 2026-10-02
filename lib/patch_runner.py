@@ -65,6 +65,12 @@ PATCHES = {
             (0x98, 'f1700500', '3a710500'),            # code segment p_filesz/p_memsz
             (0xa0, 'f1700500', '3a710500'),            # ... now include both helpers
         ]),
+    # 32-bit programs (installers, most plugin installers) use their own unix libraries.
+    'lib/wine/i386-unix/winex11.so': (
+        'f92fb80fd86252f030b9592728ebc03d9c71bd0cb00d4c518bf059657a501a2b', [
+            (0x3fbfb, 'e890f1ffff', '31c00f1f00'),     # GetWindowStyleMasks: HasWindowManager("Mutter") -> 0
+            (0x3fe29, 'e862efffff', '31c00f1f00'),     # set_mwm_hints: same check
+        ]),
     'lib/wine/x86_64-unix/win32u.so': (
         'cc68ef24f80d15ff4fc7df598910a1437b09f4a64dcca83594678dbebe75a1a8', [
             (0x100b40, '7440', 'eb40'),                # draw_menu_item: grayed text, no emboss
@@ -80,6 +86,11 @@ PATCHES = {
             (0x85385, '0f859d000000', '660f1f440000'),
             (0x853f0, '8b45dc8d75e0', 'e93300000090'),
             (0x85428, '8d46ec895c241489442410c744240c6ef01510c744240820da1810c7442404', CAVE32),
+            # The DLL is usually rebased (32-bit): base relocations for absolute addresses in
+            # the replaced code would rewrite 4 bytes of the new code. Make them no-ops.
+            (0x22c91c, '423c', '0000'),                # reloc at 0x58c42
+            (0x22f96a, '3734', '0000'),                # reloc at 0x85437
+            (0x22f96c, '3f34', '0000'),                # reloc at 0x8543f
         ]),
 }
 HERE = os.path.dirname(os.path.abspath(__file__))
