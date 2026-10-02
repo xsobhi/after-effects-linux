@@ -1,0 +1,31 @@
+Subject: [PATCH] cmd: cmd /c returns the exit code of the last command, not ERRORLEVEL.
+
+On Windows, "cmd /c script.bat" exits with the exit code of the last command the script
+ran. ECHO, GOTO and other internal commands that leave ERRORLEVEL alone still end with 0,
+so a script whose last line is ECHO succeeds even after a failed command (Wine's own tests
+expect this: "cmd.exe /c sel.bat 458" gives 0 although ERRORLEVEL is 458, and a block
+script ending in ECHO after an unknown command gives "0 ok"). Wine returned ERRORLEVEL
+whenever the last command succeeded.
+
+Red Giant / Maxon installers run preflight scripts like
+    echo "Stopping MxContentService.exe..."
+    taskkill /f /im "MxContentService.exe"
+    echo "MxContentService.exe stopped."
+taskkill returns 128 when the service is not running (as on Windows), and Wine's cmd
+returned that 128, so Magic Bullet Suite and Universe failed with "Status 11015:
+err.sys.script-execution-failed: Script execution failed for task: preflight".
+(The binary patch in lib/patch_runner.py turns the "!= NO_ERROR" jump into a plain jump.)
+---
+--- a/programs/cmd/wcmdmain.c
++++ b/programs/cmd/wcmdmain.c
+@@ -4968,7 +4968,9 @@
+     {
+         RETURN_CODE return_code = WCMD_call_batch(NULL, parameters.initial_command);
+         if (return_code == RETURN_CODE_GOTO) return NO_ERROR;
+-        if (return_code != RETURN_CODE_ABORTED && return_code != RETURN_CODE_EXITED && return_code != NO_ERROR)
++        /* The exit code is the last command's, not ERRORLEVEL: a script whose last command
++         * is ECHO exits with 0 even after a command that failed (native does the same). */
++        if (return_code != RETURN_CODE_ABORTED && return_code != RETURN_CODE_EXITED)
+             return return_code;
+         return errorlevel;
+     }

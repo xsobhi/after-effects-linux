@@ -30,6 +30,9 @@ Fixes (source-level descriptions in patches/*.patch):
   cmd     DEL of a file that does not exist (or cannot be deleted) leaves ERRORLEVEL at
           0 as on Windows; Wine set 1, so installer scripts ending in a cleanup DEL
           "failed" (Maxon App: err.sys.script-execution-failed, preflight).
+          cmd /c SCRIPT.bat exits with the last command's exit code, not ERRORLEVEL, as on
+          Windows: Red Giant preflight scripts end with ECHO after taskkill of a service
+          that is not running (128), and Wine returned that 128 (Magic Bullet, Universe).
 """
 import hashlib
 import os
@@ -90,10 +93,12 @@ PATCHES = {
     'lib/wine/x86_64-windows/cmd.exe': (
         '51b46b725388d7b6036f2cab7f01d2bd2dc23327d26aea9a8839e9a3efd4bc1e', [
             (0xc299, '7507', 'eb07'),                  # WCMD_delete: never errorlevel = 1 per file
+            (0x3034c, '0f85', '90e9'),                 # wmain, cmd /c: last command's exit code
         ]),
     'lib/wine/i386-windows/cmd.exe': (
         'c4a5180bc0e0d05f7f6cb4014ef7eecc36f61f2507963410040678dd477a37ce', [
             (0xc943, '750a', 'eb0a'),                  # same in the 32-bit build
+            (0x32395, '0f85', '90e9'),                 # same in the 32-bit build
         ]),
     'lib/wine/i386-windows/mshtml.dll': (
         'd33decb1d3790abe00e49d54800998692f25295a2d29bef46650d7659479b125', [
