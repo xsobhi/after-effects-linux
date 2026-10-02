@@ -1,0 +1,52 @@
+Subject: [PATCH] server: Map ACEs that match the current token to the Unix owner bits.
+
+sd_to_mode() gave the user (and group) bits only for ACEs of the descriptor's owner SID,
+and only when that owner was in the caller's token. Every file is owned on the Unix side
+by the user running Wine, though, whatever SID the descriptor names as owner. When the
+owner is a SID the token does not have, the current user's own "full control" ACE was
+ignored and the folder lost its write bits:
+
+ - prefixes first used with another Wine build: upstream Wine's user SID is
+   S-1-5-21-0-0-0-1000, Proton's is derived from /etc/machine-id, so descriptors written
+   earlier keep the old owner (also after moving a prefix to another machine);
+ - descriptors whose owner was set to another SID (Administrators, SYSTEM, ...).
+
+Adobe's installers and apps (adobe_caps.dll, HDPIM.dll) re-apply the DACL of
+"Common Files\Adobe\caps" (Administrators: all, Everyone: read, plus the inherited ACEs)
+with SetNamedSecurityInfo(). The folder became r-xr-xr-x, SQLite could not create its
+journal next to hdpim.db, and every install stopped with "Error in setting package
+install status ... Error code: 105" (Media Encoder 2020, Photoshop 2020). Wine also could
+not store the new descriptor afterwards, since writing the xattr needs the write bit.
+
+ACEs that match the token (user, enabled groups; deny-only groups for deny ACEs) now
+set or clear the user and group bits regardless of the owner SID. Descriptors whose
+owner is the current user map as before.
+
+Applied to the Proton-CachyOS 11.0 build as a binary patch by lib/patch_runner.py
+(two jne -> jmp after the owner check in sd_to_mode).
+---
+--- a/server/file.c	2026-10-02 17:46:38.406294309 +0300
++++ b/server/file.c	2026-10-02 17:46:47.585986478 +0300
+@@ -610,8 +610,10 @@
+                     {
+                         bits_to_set &= ~((mode << 6) | (mode << 3) | mode); /* all */
+                     }
+-                    else if (token_sid_present( current->process->token, owner, TRUE ) &&
+-                             token_sid_present( current->process->token, sid, TRUE ))
++                    /* The Unix owner of every file is the user running Wine, whatever SID the
++                     * descriptor names as owner (another Wine build, a moved prefix or a
++                     * SetNamedSecurityInfo() owner): ACEs that match our token set user bits. */
++                    else if (token_sid_present( current->process->token, sid, TRUE ))
+                     {
+                         bits_to_set &= ~((mode << 6) | (mode << 3));  /* user + group */
+                     }
+@@ -627,8 +629,7 @@
+                         new_mode |= mode & bits_to_set;
+                         bits_to_set &= ~mode;
+                     }
+-                    else if (token_sid_present( current->process->token, owner, FALSE ) &&
+-                             token_sid_present( current->process->token, sid, FALSE ))
++                    else if (token_sid_present( current->process->token, sid, FALSE ))
+                     {
+                         mode = (mode << 6) | (mode << 3);  /* user + group */
+                         new_mode |= mode & bits_to_set;

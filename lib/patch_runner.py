@@ -37,6 +37,8 @@ Fixes (source-level descriptions in patches/*.patch):
           by default) is drawn with FreeType's light hinting and without embedded bitmaps,
           like Windows' natural modes; Wine loaded glyphs with full TrueType hinting, so
           text looked like Windows 98. Aliased (1-bit) text keeps full hinting.
+  server  ACEs matching the current user set a folder's Unix write bits whatever its owner
+          SID (Adobe installers made "caps" read-only in older prefixes: error 105).
 """
 import hashlib
 import os
@@ -144,6 +146,11 @@ PATCHES = {
             (0x22f96a, '3734', '0000'),                # reloc at 0x85437
             (0x22f96c, '3f34', '0000'),                # reloc at 0x8543f
         ] + ONEVENT32),
+    'bin/wineserver': (
+        '22fc7c7f322b99a788f1fd761bb68a37437b3653963a6143e983e34925ba294f', [
+            (0x33d13, '0f85f7010000', 'e9f801000090'),  # sd_to_mode, deny ACE: skip owner check
+            (0x33db4, '0f8516010000', 'e91701000090'),  # allow ACE: the same
+        ]),
 }
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -162,10 +169,10 @@ def patch_file(path, original_sha, patches):
         old, new = bytes.fromhex(old), bytes.fromhex(new)
         assert len(old) == len(new) and data[offset:offset + len(old)] == old, hex(offset)
         data[offset:offset + len(new)] = new
-    os.chmod(path, 0o755)
     tmp = path + '.tmp'
     with open(tmp, 'wb') as f:
         f.write(data)
+    os.chmod(tmp, 0o755)                    # the new file replaces the old one: keep it executable
     os.replace(tmp, path)
     return f'patched ({len(patches)} changes)'
 
