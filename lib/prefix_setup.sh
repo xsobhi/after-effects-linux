@@ -43,13 +43,26 @@ import_reg() {  # import_reg PREFIX REG — into both the 64-bit and 32-bit regi
     rm -f "$pfx/drive_c/windows/temp/$name"
 }
 
-apply_theme() {  # apply_theme PREFIX — re-run after changing the desktop theme
-    local reg
+build_msstyles() {  # build_msstyles PREFIX — a Windows visual style drawn from the GTK theme
+    local themes=$1/drive_c/windows/resources/themes
+    [[ -f "$themes/light/light.msstyles" ]] || return 1
+    python3 "$LIB_DIR/msstyles/build.py" "$themes/light/light.msstyles" \
+        "$themes/desktop/desktop.msstyles" 2>/dev/null
+}
+
+apply_theme() {  # apply_theme PREFIX [--running] — re-run after changing the desktop theme
+    local reg style=()
     reg=$(mktemp --suffix=.reg)
-    python3 "$LIB_DIR/theme.py" "$reg"
-    stop_prefix "$1"
+    if build_msstyles "$1"; then
+        style=(--msstyles 'C:\windows\resources\themes\desktop\desktop.msstyles')
+    else
+        say "GTK rendering unavailable (python3-gi, -gi-cairo, -pil, a display): classic controls"
+    fi
+    python3 "$LIB_DIR/theme.py" "$reg" "${style[@]}"
+    # --running: leave open apps alone; windows opened from now on get the new look.
+    [[ "${2:-}" == --running ]] || stop_prefix "$1"
     import_reg "$1" "$reg"
-    stop_prefix "$1"
+    [[ "${2:-}" == --running ]] || stop_prefix "$1"
     rm -f "$reg"
 }
 

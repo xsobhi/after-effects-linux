@@ -25,6 +25,7 @@ starting or signing in fixed.
 | Menus: greyed items with a white "engraved" shadow, blue hover | Menus drawn with the theme's menu colours, GTK-style hover and roomier rows ([0006](patches/0006-win32u-draw-menus-with-the-theme-colours.patch)) |
 | Viewer one redraw behind on NVIDIA: paused frame stuck at draft resolution, laggy text selection, mask paths appearing late, ghosting when resizing panels | OpenGL child windows render offscreen and Wine copies them on screen; without `GLX_OML_sync_control` the copy ran before the vsynced swap finished. Offscreen swaps now skip vsync and finish first ([0007](patches/0007-winex11-show-the-current-frame-of-offscreen-GL.patch)) |
 | Laggy typing, slow start of text editing | Keys go straight to Wine instead of through the ibus/fcitx XIM bridge (`ADOBE_WINE_IM=1` keeps it, for CJK input) |
+| Buttons, check boxes, radio buttons, combo boxes, scroll bars look like Windows 2000 | A Windows visual style is generated from your GTK theme at setup (`lib/msstyles/`): GTK draws the controls' states, the rest of Wine's Light theme is recoloured to your palette. `ae-linux theme` rebuilds it after you change the desktop theme |
 | Splash screen text panel boxed in a shadow | Compositor shadow turned off for borderless popups, as on Windows |
 | No CUDA / GPU sniffing confusion | DXVK, vkd3d-proton, DXVK-NVAPI and NVIDIA's CUDA/NVENC bridges from Proton-CachyOS |
 
@@ -119,6 +120,9 @@ adobe-wine PROGRAM.exe           run anything in the Adobe prefix (winecfg, rege
   `CLSID_FileOpenDialog`/`CLSID_FileSaveDialog`; it hands each request to
   `lib/filechooser.py`, which talks to `org.freedesktop.portal.FileChooser`. Build it with
   [Zig](https://ziglang.org): `ZIG=zig src/filedialog/build.sh` (a prebuilt copy is in `prebuilt/`).
+- `lib/msstyles/build.py` reads Wine's Light visual style from the prefix, recolours it and
+  replaces the common controls with images GTK renders in each state, then writes
+  `C:\windows\resources\themes\desktop\desktop.msstyles` (nothing from Wine is shipped here).
 - `lib/theme.py` turns the GTK theme's colours and fonts into Wine registry settings;
   `lib/wm_helper.py` adds the window-manager hints Wine leaves out.
 

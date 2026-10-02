@@ -18,6 +18,8 @@ need python3 python3; need curl curl; need xz xz-utils; need cabextract cabextra
 need unzip unzip; need zenity zenity; need xdg-mime xdg-utils; need update-mime-database shared-mime-info
 python3 -c 'import gi' 2>/dev/null || missing+=(python3-gi)
 python3 -c 'import Xlib' 2>/dev/null || missing+=(python3-xlib)
+python3 -c 'import cairo' 2>/dev/null || missing+=(python3-gi-cairo)
+python3 -c 'import PIL' 2>/dev/null || missing+=(python3-pil)
 python3 -c 'import cryptography.x509' 2>/dev/null || missing+=(python3-cryptography)
 if ((${#missing[@]})); then
     die "missing packages. Install them with:  sudo apt install ${missing[*]}"

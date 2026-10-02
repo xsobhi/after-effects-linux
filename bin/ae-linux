@@ -54,8 +54,8 @@ case "$cmd" in
         make_launchers "$prefix" ;;
     theme)
         prefix=${1:-$DEFAULT_PREFIX}
-        apply_theme "$prefix"
-        say "Theme applied to $prefix" ;;
+        apply_theme "$prefix" --running
+        say "Theme applied to $prefix (open windows keep their look until restarted)" ;;
     verify)
         prefix=${1:-$DEFAULT_PREFIX}
         dirs=()

@@ -2,8 +2,10 @@
 """Make Wine's own UI (menus, dialogs, captions, scrollbars) follow the desktop theme.
 
 Reads the current GTK theme colours and UI font (Cinnamon, then GNOME settings) and
-writes a .reg file that switches Wine to flat "classic" rendering with those colours.
-Usage: theme.py OUTPUT.reg
+writes a .reg file with those colours. With --msstyles, controls are drawn by that visual
+style (built from the GTK theme by msstyles/build.py); otherwise Wine's flat "classic"
+rendering is used.
+Usage: theme.py OUTPUT.reg [--msstyles C:\\path\\to\\theme.msstyles]
 """
 import os
 import re
@@ -127,7 +129,7 @@ def reg_hex(data):
     return 'hex:' + ','.join(f'{b:02x}' for b in data)
 
 
-def build(out_path):
+def build(out_path, msstyles=None):
     gtk_theme = desktop_setting('gtk-theme') or 'Adwaita'
     scheme = gsetting('org.x.apps.portal', 'color-scheme') or \
         gsetting('org.gnome.desktop.interface', 'color-scheme') or ''
@@ -160,7 +162,9 @@ def build(out_path):
     # Menu bar row like GTK's (text line + 4px padding top and bottom), in twips.
     lines += [f'"MenuHeight"="-{(round(size * 96 / 72 * 1.2) + 9) * 15}"',
               '', '[HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\ThemeManager]',
-              '"ThemeActive"="0"',
+              f'"ThemeActive"="{1 if msstyles else 0}"',
+              ] + ([f'"DllName"="{msstyles.replace(chr(92), chr(92) * 2)}"', '"ColorName"="Blue"',
+                    '"SizeName"="NormalSize"'] if msstyles else []) + [
               '', '[HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize]',
               f'"AppsUseLightTheme"=dword:{0 if dark else 1:08x}',
               f'"SystemUsesLightTheme"=dword:{0 if dark else 1:08x}',
@@ -175,6 +179,6 @@ def build(out_path):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 2:
+    if len(sys.argv) not in (2, 4) or (len(sys.argv) == 4 and sys.argv[2] != '--msstyles'):
         sys.exit(__doc__)
-    build(sys.argv[1])
+    build(sys.argv[1], sys.argv[3] if len(sys.argv) == 4 else None)
