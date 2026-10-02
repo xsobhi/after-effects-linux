@@ -24,6 +24,9 @@ Fixes (source-level descriptions in patches/*.patch):
   win32u  menus drawn like the desktop's: disabled items in the theme's disabled colour
           (not fixed grey with a white "engraved" shadow), the hot item filled with the
           menu-highlight colour and keeping the menu text colour, roomier popup rows.
+  cmd     DEL of a file that does not exist (or cannot be deleted) leaves ERRORLEVEL at
+          0 as on Windows; Wine set 1, so installer scripts ending in a cleanup DEL
+          "failed" (Maxon App: err.sys.script-execution-failed, preflight).
 """
 import hashlib
 import os
@@ -78,6 +81,14 @@ PATCHES = {
             (0x100c90, 'bf0e000000', 'bf07000000'),    # hot item text: COLOR_MENUTEXT
             (0x100ead, 'bf0d000000', 'bf1d000000'),    # hot item fill: COLOR_MENUHILIGHT
             (0xff6be, '8d5004', '8d5008'),             # calc_menu_item_size: row = text + 8
+        ]),
+    'lib/wine/x86_64-windows/cmd.exe': (
+        '51b46b725388d7b6036f2cab7f01d2bd2dc23327d26aea9a8839e9a3efd4bc1e', [
+            (0xc299, '7507', 'eb07'),                  # WCMD_delete: never errorlevel = 1 per file
+        ]),
+    'lib/wine/i386-windows/cmd.exe': (
+        'c4a5180bc0e0d05f7f6cb4014ef7eecc36f61f2507963410040678dd477a37ce', [
+            (0xc943, '750a', 'eb0a'),                  # same in the 32-bit build
         ]),
     'lib/wine/i386-windows/mshtml.dll': (
         'd33decb1d3790abe00e49d54800998692f25295a2d29bef46650d7659479b125', [

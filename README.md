@@ -26,6 +26,7 @@ starting or signing in fixed.
 | Viewer one redraw behind on NVIDIA: paused frame stuck at draft resolution, laggy text selection, mask paths appearing late, ghosting when resizing panels | OpenGL child windows render offscreen and Wine copies them on screen; without `GLX_OML_sync_control` the copy ran before the vsynced swap finished. Offscreen swaps now skip vsync and finish first ([0007](patches/0007-winex11-show-the-current-frame-of-offscreen-GL.patch)) |
 | Laggy typing, slow start of text editing | Keys go straight to Wine instead of through the ibus/fcitx XIM bridge (`ADOBE_WINE_IM=1` keeps it, for CJK input) |
 | Buttons, check boxes, radio buttons, combo boxes, scroll bars look like Windows 2000 | A Windows visual style is generated from your GTK theme at setup (`lib/msstyles/`): GTK draws the controls' states, the rest of Wine's Light theme is recoloured to your palette. `ae-linux theme` rebuilds it after you change the desktop theme |
+| Installers whose batch scripts end with a clean-up `del` fail (Maxon App: "Script execution failed for task: preflight") | `del` of a missing file leaves `%ERRORLEVEL%` at 0 as on Windows ([0008](patches/0008-cmd-del-keeps-errorlevel-0-for-missing-files.patch)) |
 | Splash screen text panel boxed in a shadow | Compositor shadow turned off for borderless popups, as on Windows |
 | No CUDA / GPU sniffing confusion | DXVK, vkd3d-proton, DXVK-NVAPI and NVIDIA's CUDA/NVENC bridges from Proton-CachyOS |
 

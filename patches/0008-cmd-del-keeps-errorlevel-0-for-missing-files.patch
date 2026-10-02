@@ -1,0 +1,26 @@
+Subject: [PATCH] cmd: Keep ERRORLEVEL at 0 when DEL finds no file to delete.
+
+On Windows, DEL sets ERRORLEVEL only for bad or missing parameters; deleting a file that
+does not exist (or cannot be deleted) prints a message and leaves ERRORLEVEL at 0. Wine
+set 1, so batch files ending with a clean-up DEL exited with 1 and installers treated
+them as failed (Maxon App 2024: "err.sys.script-execution-failed: Script execution
+failed for task: preflight", from `del /f "%PROGRAMDATA%\Maxon\Service\mx1trial.inf"`).
+
+Applied to the Proton-CachyOS 11.0 build as a binary patch by lib/patch_runner.py.
+---
+--- a/programs/cmd/builtins.c	2026-10-02 14:58:42.302840811 +0300
++++ b/programs/cmd/builtins.c	2026-10-02 14:58:42.312725332 +0300
+@@ -1568,10 +1568,9 @@
+             continue;    /* skip options */
+ 
+         argsProcessed = TRUE;
+-        if (!WCMD_delete_one(thisArg))
+-        {
+-            errorlevel = ERROR_INVALID_FUNCTION;
+-        }
++        /* Like Windows, files that are missing or cannot be deleted leave ERRORLEVEL at 0;
++         * only bad or missing parameters set it. */
++        WCMD_delete_one(thisArg);
+     }
+ 
+     /* Handle no valid args */
