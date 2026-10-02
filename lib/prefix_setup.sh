@@ -26,6 +26,23 @@ install_filedialog() {  # install_filedialog PREFIX REG
     done >> "$reg"
 }
 
+msxml_progids() {  # msxml_progids PREFIX — version-independent MSXML names -> MSXML 3, as on Windows
+    # Wine's builtin msxml2.dll claims Msxml2.DOMDocument & co. (MSXML 2.6 classes) on every
+    # wineboot; with Microsoft's msxml3.dll those classes do not exist, so programs asking
+    # for "Msxml2.DOMDocument" got CLASS_E_CLASSNOTAVAILABLE (VC++ redist setup: "Failed to
+    # load manifest as XML document").
+    local name clsid view
+    for name in DOMDocument:F6D90F11 FreeThreadedDOMDocument:F6D90F12 XMLHTTP:F6D90F16; do
+        clsid="{${name#*:}-9C73-11D3-B32E-00C04F990BB4}"
+        for view in 64 32; do
+            wine_in "$1" reg add "HKLM\\Software\\Classes\\Msxml2.${name%%:*}\\CLSID" /ve /d "$clsid" \
+                /f /reg:$view >/dev/null 2>&1
+            wine_in "$1" reg add "HKLM\\Software\\Classes\\Msxml2.${name%%:*}\\CurVer" /ve \
+                /d "Msxml2.${name%%:*}.3.0" /f /reg:$view >/dev/null 2>&1
+        done
+    done
+}
+
 gecko_prefs() {  # copy the web-content colour prefs into Gecko copies installed in the prefix
     local d
     for d in "$1"/drive_c/windows/{system32,syswow64}/gecko/*/wine_gecko/defaults/pref; do
@@ -89,6 +106,7 @@ setup_prefix() {  # setup_prefix PREFIX
     install_gpu_libs "$pfx" "$reg"
     install_filedialog "$pfx" "$reg"
     import_reg "$pfx" "$reg"
+    msxml_progids "$pfx"
     # TEMP must stay an expandable string (Proton's user is "steamuser"; adopted prefixes may
     # point at another profile). Wine's regedit misreads hex(2) in UTF-8 .reg files, so use reg.
     for v in TEMP TMP; do
