@@ -6,8 +6,8 @@ Usage: build.py X86_64_MSHTML_DLL I386_MSHTML_DLL
   patched by an older patch_runner without these caves). Needs binutils (as, ld, objcopy, nm).
 
 Each cave goes into the zero padding after the end of .text and the section's VirtualSize is
-extended to cover it. The 64-bit cave also gets an unwind entry (.pdata/.xdata padding) so
-exceptions and backtraces can unwind through it.
+extended to cover it. The 64-bit cave functions also get unwind entries (.pdata/.xdata padding)
+so exceptions and backtraces can unwind through them.
 """
 import os
 import struct
@@ -19,14 +19,25 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, '..', '..', 'lib', 'mshtml_caves.py')
 HELPERS = ('dispex_get_chain_builtin_id', 'script_parse_event', 'dispex_prop_put')
 ARCHS = {
-    # hook: offset into HTMLElement_setAttribute of the nsIDOMElement_SetAttribute call
-    'x86_64': dict(src='mshtml-onevent64.s', emul='elf_x86_64', as_flag='--64', prefix='',
-                   hook_sym='HTMLElement_setAttribute', hook_off=0xe5, hook_old='ff9080010000'),
-    'i386': dict(src='mshtml-onevent32.s', emul='elf_i386', as_flag='--32', prefix='_',
-                 hook_sym='_HTMLElement_setAttribute@28', hook_off=0xa7, hook_old='ff92c0000000'),
+    # hooks: (function, offset of the nsIDOMElement call in it, its bytes, cave entry point)
+    'x86_64': dict(src='mshtml-onevent64.s', emul='elf_x86_64', as_flag='--64', prefix='', hooks=[
+        ('HTMLElement_setAttribute', 0xe5, 'ff9080010000', 'set_hook'),          # SetAttribute
+        ('HTMLElement_removeAttribute', 0x41d, 'ff9090010000', 'remove_hook'),   # RemoveAttribute
+    ]),
+    'i386': dict(src='mshtml-onevent32.s', emul='elf_i386', as_flag='--32', prefix='_', hooks=[
+        ('_HTMLElement_setAttribute@28', 0xa7, 'ff92c0000000', 'set_hook'),
+        ('_HTMLElement_removeAttribute@16', 0x2a6, 'ff92c8000000', 'remove_hook'),
+    ]),
 }
-# push rsi (1 byte); push rdi (1); sub rsp,0x98 (7) -> UNWIND_INFO v1, prolog 9, 4 code slots
-UNWIND64 = bytes([1, 9, 4, 0, 9, 0x01, 0x13, 0, 2, 0x70, 1, 0x60])
+# x86_64 unwind data per cave function: (prolog bytes, UNWIND_INFO)
+STUB_UNWIND = bytes([1, 4, 1, 0, 4, 0x42, 0, 0])            # sub rsp,0x28
+UNWIND64 = {
+    'set_hook': ('4883ec28', STUB_UNWIND),
+    'remove_hook': ('4883ec28', STUB_UNWIND),
+    # push rsi; push rdi; push rbx; sub rsp,0x90
+    'set_handler': ('5657534881ec90000000',
+                    bytes([1, 10, 5, 0, 10, 0x01, 0x12, 0, 3, 0x30, 2, 0x70, 1, 0x60, 0, 0])),
+}
 
 
 def pe_layout(data):
@@ -54,14 +65,41 @@ def assemble(arch, cave_va, syms):
         obj, elf, binf = (os.path.join(tmp, n) for n in ('c.o', 'c.elf', 'c.bin'))
         subprocess.run(['as', a['as_flag'], '-o', obj, os.path.join(HERE, a['src'])], check=True)
         defs = [f'--defsym={h}={syms[a["prefix"] + h]:#x}' for h in HELPERS]
-        subprocess.run(['ld', '-m', a['emul'], f'-Ttext={cave_va:#x}', '-e', 'onevent', *defs,
+        subprocess.run(['ld', '-m', a['emul'], f'-Ttext={cave_va:#x}', '-e', 'set_hook', *defs,
                         '-o', elf, obj], check=True)
         subprocess.run(['objcopy', '-O', 'binary', '-j', '.text', elf, binf], check=True)
-        return open(binf, 'rb').read()
+        labels = {k: v for k, v in symbols(elf).items() if k in ('set_hook', 'remove_hook', 'set_handler')}
+        return open(binf, 'rb').read(), labels
 
 
 def u32(v):
     return struct.pack('<I', v).hex()
+
+
+def unwind_patches(data, ddir, secs, cave, cave_rva, labels):
+    pdata, xdata = secs['.pdata'], secs['.xdata']
+    exc_size = struct.unpack_from('<I', data, ddir + 3 * 8 + 4)[0]
+    assert exc_size == pdata['vsize'] and xdata['vsize'] % 4 == 0
+    assert struct.unpack_from('<I', data, pdata['raw'] + pdata['vsize'] - 12)[0] < cave_rva, 'pdata order'
+    funcs = sorted(labels, key=labels.get)
+    ends = [labels[f] for f in funcs[1:]] + [cave_rva + len(cave)]
+    entries, infos = b'', b''
+    for func, end in zip(funcs, ends):
+        prolog, info = UNWIND64[func]
+        start = labels[func] - cave_rva
+        assert cave[start:start + len(prolog) // 2].hex() == prolog, f'{func}: prolog changed, fix UNWIND64'
+        if info not in infos:
+            infos += info
+        info_rva = xdata['va'] + xdata['vsize'] + infos.index(info)
+        entries += struct.pack('<III', labels[func], end, info_rva)
+    assert pdata['vsize'] + len(entries) <= pdata['rawsz'] and xdata['vsize'] + len(infos) <= xdata['rawsz']
+    return [
+        (pdata['raw'] + pdata['vsize'], '00' * len(entries), entries.hex(), 'RUNTIME_FUNCTIONs'),
+        (xdata['raw'] + xdata['vsize'], '00' * len(infos), infos.hex(), 'their UNWIND_INFO'),
+        (pdata['hdr'] + 8, u32(pdata['vsize']), u32(pdata['vsize'] + len(entries)), '.pdata VirtualSize'),
+        (xdata['hdr'] + 8, u32(xdata['vsize']), u32(xdata['vsize'] + len(infos)), '.xdata VirtualSize'),
+        (ddir + 3 * 8 + 4, u32(exc_size), u32(exc_size + len(entries)), 'exception directory size'),
+    ]
 
 
 def build(arch, path):
@@ -70,32 +108,22 @@ def build(arch, path):
     syms = symbols(path)
     text = secs['.text']
     cave_rva = text['va'] + (text['vsize'] + 15 & ~15)
-    cave = assemble(arch, base + cave_rva, syms)
+    cave, labels = assemble(arch, base + cave_rva, syms)
+    labels = {k: v - base for k, v in labels.items()}          # -> RVAs
     cave_off = text['raw'] + cave_rva - text['va']
     assert cave_rva - text['va'] + len(cave) <= text['rawsz'], 'no room after .text'
-    hook_off = syms[a['hook_sym']] - base + a['hook_off'] - text['va'] + text['raw']
-    rel = cave_rva - (hook_off - text['raw'] + text['va'] + 5)
-    patches = [
-        (hook_off, a['hook_old'], 'e8' + struct.pack('<i', rel).hex() + '90', 'SetAttribute -> onevent'),
-        (cave_off, '00' * len(cave), cave.hex(), 'onevent (src/runner-caves)'),
+    patches = []
+    for func, off, old, label in a['hooks']:
+        hook_rva = syms[func] - base + off
+        rel = labels[label] - (hook_rva + 5)
+        patches.append((text['raw'] + hook_rva - text['va'], old, 'e8' + struct.pack('<i', rel).hex() + '90',
+                        f'{func.strip("_").split("@")[0]}: call {label}'))
+    patches += [
+        (cave_off, '00' * len(cave), cave.hex(), 'set_hook, remove_hook, set_handler (src/runner-caves)'),
         (text['hdr'] + 8, u32(text['vsize']), u32(cave_rva - text['va'] + len(cave)), '.text VirtualSize'),
     ]
     if arch == 'x86_64':
-        pdata, xdata = secs['.pdata'], secs['.xdata']
-        exc_size = struct.unpack_from('<I', data, ddir + 3 * 8 + 4)[0]
-        assert exc_size == pdata['vsize'] and pdata['vsize'] + 12 <= pdata['rawsz']
-        assert xdata['vsize'] % 4 == 0 and xdata['vsize'] + len(UNWIND64) <= xdata['rawsz']
-        last_begin = struct.unpack_from('<I', data, pdata['raw'] + pdata['vsize'] - 12)[0]
-        assert last_begin < cave_rva, 'pdata must stay sorted'
-        unwind_rva = xdata['va'] + xdata['vsize']
-        entry = struct.pack('<III', cave_rva, cave_rva + len(cave), unwind_rva)
-        patches += [
-            (pdata['raw'] + pdata['vsize'], '00' * 12, entry.hex(), 'RUNTIME_FUNCTION for onevent'),
-            (xdata['raw'] + xdata['vsize'], '00' * len(UNWIND64), UNWIND64.hex(), 'its UNWIND_INFO'),
-            (pdata['hdr'] + 8, u32(pdata['vsize']), u32(pdata['vsize'] + 12), '.pdata VirtualSize'),
-            (xdata['hdr'] + 8, u32(xdata['vsize']), u32(xdata['vsize'] + len(UNWIND64)), '.xdata VirtualSize'),
-            (ddir + 3 * 8 + 4, u32(exc_size), u32(exc_size + 12), 'exception directory size'),
-        ]
+        patches += unwind_patches(data, ddir, secs, cave, cave_rva, labels)
     for off, old, _, what in patches:
         assert data[off:off + len(old) // 2].hex() == old, f'{arch} {what}: unexpected bytes at {off:#x}'
     return patches
@@ -104,17 +132,19 @@ def build(arch, path):
 def main(x64, x86):
     lines = ['"""Generated by src/runner-caves/build.py - do not edit."""', '',
              '# (file offset, original bytes, patched bytes) for mshtml.dll: "on<event>" attributes',
-             '# set by setAttribute() get a working event handler (patches/0008).']
+             '# set or removed by script set or clear the event handler (patches/0009).']
     for name, arch, path in (('ONEVENT64', 'x86_64', x64), ('ONEVENT32', 'i386', x86)):
         lines.append(f'{name} = [')
         for off, old, new, what in build(arch, path):
+            old = f"'00' * {len(old) // 2}" if not old.strip('0') else repr(old)
             if len(new) > 64:
                 lines.append(f'    # {what}')
-                lines.append(f'    ({off:#x}, {old[:2]!r} * {len(old) // 2}, (')
+                lines.append(f'    ({off:#x}, {old}, (')
                 lines += [f'        {new[i:i + 64]!r}' for i in range(0, len(new), 64)]
                 lines.append('    )),')
             else:
-                lines.append(f'    ({off:#x}, {old!r}, {new!r}),'.ljust(60) + f'# {what}')
+                line = f'    ({off:#x}, {old}, {new!r}),'
+                lines.append(f'{line:<58}  # {what}')
         lines.append(']')
     with open(OUT, 'w') as f:
         f.write('\n'.join(lines) + '\n')

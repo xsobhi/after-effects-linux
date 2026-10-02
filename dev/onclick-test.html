@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="X-UA-Compatible" content="IE=EmulateIE10" />
+<title>onclick attribute test</title>
+<!-- dev/onclick-test.sh serves this page and prints what it reports (patches/0009). -->
+<script>
+var log = [], hits = [];
+function hit(what) { hits.push(what); }
+function has(what) { return ("|" + hits.join("|") + "|").indexOf("|" + what + "|") >= 0; }
+function step(name, fn) {
+    try { log.push((fn() ? "PASS " : "FAIL ") + name); }
+    catch(e) { log.push("ERROR " + name + ": " + (e.message || e)); }
+}
+function el(id) { return document.getElementById(id); }
+function report(text) {
+    var x = new XMLHttpRequest();
+    x.open("POST", "/result", false);
+    x.send(text);
+}
+
+function run() {
+    log.push("documentMode=" + document.documentMode);
+    if(location.hash == "#navigated") {
+        log.push("FAIL return false cancels navigation (the link navigated)");
+        report(log.join("\n"));
+        return;
+    }
+    /* What Adobe's installer does: setAttribute("onclick", "...; return false;") */
+    step("setAttribute onclick runs", function() {
+        el("install").setAttribute("onclick", "hit('install:' + this.id); return false;");
+        el("install").click();
+        return has("install:install");
+    });
+    step("onclick property is a function", function() { return typeof el("install").onclick == "function"; });
+    step("replaced handler", function() {
+        el("other").setAttribute("onclick", "hit('old')");
+        el("other").setAttribute("onclick", "hit('new')");
+        el("other").click();
+        return has("new") && !has("old");
+    });
+    step("empty value removes handler (jQuery removeAttr)", function() {
+        hits = [];
+        el("other").setAttribute("onclick", "");
+        el("other").click();
+        return !has("new");
+    });
+    step("mixed-case onMouseOver", function() {
+        el("mixed").setAttribute("onMouseOver", "hit('mouseover')");
+        var ev = document.createEvent("Event");
+        ev.initEvent("mouseover", true, true);
+        el("mixed").dispatchEvent(ev);
+        return has("mouseover");
+    });
+    step("plain attribute", function() {
+        el("mixed").setAttribute("title", "plain");
+        return el("mixed").getAttribute("title") === "plain";
+    });
+    step("unknown on* attribute stored", function() {
+        el("mixed").setAttribute("onfoo", "hit('foo')");
+        return el("mixed").getAttribute("onfoo") === "hit('foo')";
+    });
+    step("removeAttribute removes a setAttribute handler", function() {
+        hits = [];
+        el("other").setAttribute("onclick", "hit('again')");
+        el("other").removeAttribute("onclick");
+        el("other").click();
+        return !has("again") && el("other").onclick === null;
+    });
+    step("removeAttribute removes a markup handler", function() {
+        hits = [];
+        el("markup").removeAttribute("onclick");
+        el("markup").click();
+        return !has("markup") && el("markup").onclick === null;
+    });
+    step("removeAttribute without attribute keeps property handler", function() {
+        var f = function() { hit("prop"); };
+        el("plain").onclick = f;
+        el("plain").removeAttribute("onclick");
+        return el("plain").onclick === f;
+    });
+    step("property handler is kept by setAttribute of another event", function() {
+        hits = [];
+        el("plain").setAttribute("ondblclick", "hit('dbl')");
+        el("plain").click();
+        return has("prop");
+    });
+    step("return false cancels link navigation", function() {
+        el("link").setAttribute("onclick", "hit('link'); return false;");
+        el("link").click();
+        return has("link") && location.hash != "#navigated";
+    });
+    report(log.join("\n"));
+    /* Then wait for a real mouse click (the test script clicks the page centre) */
+    el("big").setAttribute("onclick", "report('PASS real mouse click runs the handler'); return false;");
+    el("big").style.display = "block";
+    report("ready for click");
+}
+</script>
+<style>#big { display: none; position: absolute; left: 0; top: 0; width: 100%; height: 100%; }</style>
+</head>
+<body onload="run()">
+<input id="install" type="button" value="Install" />
+<a id="link" href="#navigated">link</a>
+<input id="other" type="button" value="Other" />
+<div id="mixed">mixed</div>
+<input id="markup" type="button" value="Markup" onclick="hit('markup')" />
+<input id="plain" type="button" value="Plain" />
+<input id="big" type="button" value="Install" />
+</body>
+</html>

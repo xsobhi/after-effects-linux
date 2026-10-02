@@ -1,0 +1,81 @@
+Subject: [PATCH] mshtml: Set the event handler for on<event> attributes set from script.
+
+In IE9+ document modes, setAttribute("onclick", "code") stored the attribute in Gecko but no
+handler was created, so el.onclick stayed null and clicks did nothing. IE compiles the text
+like an attribute in the markup. Adobe's HDBox installers attach their Install/Continue
+button actions this way ($("#continueButton").attr("onclick", "continueBtnClicked(...);
+return false;"), document mode IE10), so those buttons did nothing under Wine.
+removeAttribute() of an existing on<event> attribute now also clears the handler (IE9/10
+make it null), and an empty value removes it (jQuery's removeAttr sets "" first).
+(The binary patch in lib/patch_runner.py implements this as code caves; assembly sources in
+src/runner-caves, built into lib/mshtml_caves.py by src/runner-caves/build.py.)
+---
+--- a/dlls/mshtml/htmlelem.c
++++ b/dlls/mshtml/htmlelem.c
+@@ -33,6 +33,7 @@
+ 
+ #include "mshtml_private.h"
+ #include "htmlevent.h"
++#include "htmlscript.h"
+ #include "htmlstyle.h"
+ 
+ WINE_DEFAULT_DEBUG_CHANNEL(mshtml);
+@@ -1025,6 +1026,34 @@
+     return dispex_prop_put(&elem->node.event_target.dispex, dispid, LOCALE_SYSTEM_DEFAULT, v, &ei, NULL);
+ }
+ 
++/* In IE9+ modes, setting an on<event> attribute from script also sets the event handler,
++   compiled like attributes in the markup (check_event_attr); removing it clears the handler. */
++static void set_event_attr_handler(HTMLElement *elem, const WCHAR *name, const WCHAR *text)
++{
++    HTMLInnerWindow *window = elem->node.doc ? elem->node.doc->window : NULL;
++    IDispatch *disp = NULL;
++    EXCEPINFO ei;
++    VARIANT v;
++    DISPID id;
++
++    if(!name || (name[0] != 'o' && name[0] != 'O') || (name[1] != 'n' && name[1] != 'N'))
++        return;
++    if(FAILED(dispex_get_chain_builtin_id(&elem->node.event_target.dispex, name, fdexNameCaseInsensitive, &id)))
++        return;
++
++    V_VT(&v) = VT_NULL;
++    if(text && *text) {
++        if(!window || !(disp = script_parse_event(window, text)))
++            return;
++        V_VT(&v) = VT_DISPATCH;
++        V_DISPATCH(&v) = disp;
++    }
++
++    dispex_prop_put(&elem->node.event_target.dispex, id, LOCALE_SYSTEM_DEFAULT, &v, &ei, NULL);
++    if(disp)
++        IDispatch_Release(disp);
++}
++
+ static HRESULT WINAPI HTMLElement_setAttribute(IHTMLElement *iface, BSTR strAttributeName,
+                                                VARIANT AttributeValue, LONG lFlags)
+ {
+@@ -1079,6 +1108,8 @@
+     nsAString_Finish(&value_str);
+     if(NS_FAILED(nsres))
+         WARN("SetAttribute failed: %08lx\n", nsres);
++    else if(V_VT(&val) == VT_BSTR)
++        set_event_attr_handler(This, strAttributeName, V_BSTR(&val));
+     hres = map_nsresult(nsres);
+ 
+ done:
+@@ -1242,8 +1273,12 @@
+     }
+ 
+     *pfSuccess = element_has_attribute(This, strAttributeName);
+-    if(*pfSuccess)
+-        return element_remove_attribute(This, strAttributeName);
++    if(*pfSuccess) {
++        hres = element_remove_attribute(This, strAttributeName);
++        if(SUCCEEDED(hres))
++            set_event_attr_handler(This, strAttributeName, NULL);
++        return hres;
++    }
+     return S_OK;
+ }
+ 

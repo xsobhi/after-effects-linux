@@ -13,6 +13,9 @@ Fixes (source-level descriptions in patches/*.patch):
   mshtml  queryCommandSupported returns FALSE instead of E_NOTIMPL; <!DOCTYPE> pages
           default to IE11 mode (what FEATURE_BROWSER_EMULATION=11001 asks for); and
           location.port is "" for default ports. Needed by Adobe's sign-in page.
+          setAttribute("on<event>", "code") in IE9+ document mode also sets a working
+          event handler, as in IE (Wine only stored the text): Adobe's installers attach
+          the Install/Continue button actions that way (code caves: src/runner-caves).
   winex11 let the window manager decorate windows under Mutter-based WMs again: Proton
           turns decorations off there, and Cinnamon's Muffin reports itself as "Mutter
           (Muffin)", so every window got Wine-drawn, Windows-style title bars.
@@ -33,6 +36,8 @@ import os
 import shutil
 import sys
 
+from mshtml_caves import ONEVENT32, ONEVENT64
+
 CAVE64 = ('448b4ddc4181f9bb0100000f849effffff4183f9500f8494ffffff488d75e0e9b4ffffff')
 CAVE32 = ('8b45dc3dbb0100000f8486ffffff83f8500f847dffffff8d75e0e9afffffff')
 
@@ -50,7 +55,7 @@ PATCHES = {
             (0x83d89, '0f8581000000', '660f1f440000'),
             (0x83de0, '448b4ddc488d75e0', 'e92b000000909090'),
             (0x83e10, '488d41d848895424284c8d0d26930d00b90300000048894424204c8d05af301100488d15', CAVE64),
-        ]),
+        ] + ONEVENT64),
     'lib/wine/x86_64-unix/winex11.so': (
         'fa03c9c29de8af9eaf64ad9ddbc03954e1c10925c70072fee3cabd32db4ee02f', [
             (0x44d4c, 'e81ff1ffff', '31c00f1f00'),     # GetWindowStyleMasks: HasWindowManager("Mutter") -> 0
@@ -102,7 +107,7 @@ PATCHES = {
             (0x22c91c, '423c', '0000'),                # reloc at 0x58c42
             (0x22f96a, '3734', '0000'),                # reloc at 0x85437
             (0x22f96c, '3f34', '0000'),                # reloc at 0x8543f
-        ]),
+        ] + ONEVENT32),
 }
 HERE = os.path.dirname(os.path.abspath(__file__))
 

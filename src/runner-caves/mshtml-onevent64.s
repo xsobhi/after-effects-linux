@@ -1,61 +1,96 @@
-# mshtml.dll (x86_64): event handler from an "on<event>" attribute set by setAttribute().
-# Source-level description: patches/0008-mshtml-setAttribute-compiles-event-handlers.patch.
-#
-# HTMLElement_setAttribute, IE9+ branch: the call nsIDOMElement_SetAttribute (call [rax+0x180])
-# is replaced by "call onevent". On entry rcx/rdx/r8/rax are still set up for that call and
-#   rbx = attribute name (BSTR), r14 = HTMLElement (its DispatchEx), [rbp-0x20] = value VARIANT.
-# Returns the nsresult in eax, like the replaced call. Built by build.sh at the end of .text.
+# mshtml.dll (x86_64): "on<event>" attributes set or removed by script also set or clear the
+# element's event handler, as in IE9+. Source-level description:
+# patches/0009-mshtml-setAttribute-compiles-event-handlers.patch. Placed after the end of .text
+# by build.py; every entry point gets an unwind entry (UNWIND in build.py matches the prologs).
         .intel_syntax noprefix
         .text
-        .globl onevent
-onevent:
+
+# HTMLElement_setAttribute, IE9+ branch: replaces "call [rax+0x180]" (nsIDOMElement_SetAttribute;
+# rcx/rdx/r8/rax are set up for it). rbx = name, r14 = HTMLElement, [rbp-0x20] = value VARIANT.
+        .globl set_hook
+set_hook:
+        sub     rsp, 0x28
+        call    qword ptr [rax+0x180]
+        test    eax, eax
+        js      1f
+        cmp     word ptr [rbp-0x20], 8  # VT_BSTR
+        jne     1f
+        mov     [rsp+0x20], eax
+        mov     rcx, r14
+        mov     rdx, rbx
+        mov     r8, [rbp-0x18]
+        call    set_handler
+        mov     eax, [rsp+0x20]
+1:      add     rsp, 0x28
+        ret
+
+# HTMLElement_removeAttribute, IE9+ branch, the attribute exists: replaces "call [rax+0x190]"
+# (nsIDOMElement_RemoveAttribute). rbx = name, r14 = HTMLElement.
+        .globl remove_hook
+remove_hook:
+        sub     rsp, 0x28
+        call    qword ptr [rax+0x190]
+        test    eax, eax
+        js      1f
+        mov     [rsp+0x20], eax
+        mov     rcx, r14
+        mov     rdx, rbx
+        xor     r8d, r8d
+        call    set_handler
+        mov     eax, [rsp+0x20]
+1:      add     rsp, 0x28
+        ret
+
+# set_handler(HTMLElement *elem, const WCHAR *name, const WCHAR *text): if name is one of the
+# element's builtin on<event> properties, elem.on<event> = function compiled from text
+# (like attributes in the markup), or null for a NULL/empty text.
+        .globl set_handler
+set_handler:
         push    rsi
         push    rdi
-        sub     rsp, 0x98               # 0x30 id, 0x38 VARIANT handler, 0x50 EXCEPINFO
-        call    qword ptr [rax+0x180]   # nsIDOMElement_SetAttribute
-        mov     esi, eax
-        test    eax, eax
-        js      done
-        test    rbx, rbx
+        push    rbx
+        sub     rsp, 0x90               # 0x30 id, 0x38 VARIANT handler, 0x50 EXCEPINFO
+        mov     rsi, rcx
+        mov     rdi, rdx
+        mov     rbx, r8
+        test    rdi, rdi
         jz      done
-        movzx   eax, word ptr [rbx]     # name starts with "on" (any case)?
+        movzx   eax, word ptr [rdi]     # name starts with "on" (any case)?
         or      eax, 0x20
         cmp     eax, 'o'
         jne     done
-        movzx   eax, word ptr [rbx+2]
+        movzx   eax, word ptr [rdi+2]
         or      eax, 0x20
         cmp     eax, 'n'
         jne     done
-        cmp     word ptr [rbp-0x20], 8  # VT_BSTR value
-        jne     done
-        mov     rcx, r14                # builtin on<event> property (also on prototypes)?
-        mov     rdx, rbx
+        mov     rcx, rsi                # builtin property, also found on prototypes
+        mov     rdx, rdi
         mov     r8d, 8                  # fdexNameCaseInsensitive
         lea     r9, [rsp+0x30]
         call    dispex_get_chain_builtin_id
         test    eax, eax
         js      done
         xor     edi, edi
-        mov     qword ptr [rsp+0x38], 1 # VT_NULL: an empty value removes the handler
-        mov     rdx, [rbp-0x18]
-        test    rdx, rdx
+        mov     qword ptr [rsp+0x38], 1 # VT_NULL
+        test    rbx, rbx
         jz      put
-        cmp     word ptr [rdx], 0
+        cmp     word ptr [rbx], 0
         je      put
-        mov     rcx, [r14+0x70]         # node.doc
+        mov     rcx, [rsi+0x70]         # node.doc
         test    rcx, rcx
         jz      done
         mov     rcx, [rcx+0x1a0]        # doc->window
         test    rcx, rcx
         jz      done
-        call    script_parse_event      # same compilation as for attributes in the markup
+        mov     rdx, rbx
+        call    script_parse_event
         test    rax, rax
         jz      done
         mov     rdi, rax
         mov     qword ptr [rsp+0x38], 9 # VT_DISPATCH
         mov     [rsp+0x40], rax
 put:
-        mov     rcx, r14                # element.on<event> = handler
+        mov     rcx, rsi
         mov     edx, [rsp+0x30]
         mov     r8d, 0x800              # LOCALE_SYSTEM_DEFAULT
         lea     r9, [rsp+0x38]
@@ -69,8 +104,8 @@ put:
         mov     rax, [rdi]
         call    qword ptr [rax+0x10]    # IDispatch_Release
 done:
-        mov     eax, esi
-        add     rsp, 0x98
+        add     rsp, 0x90
+        pop     rbx
         pop     rdi
         pop     rsi
         ret

@@ -27,6 +27,7 @@ starting or signing in fixed.
 | Laggy typing, slow start of text editing | Keys go straight to Wine instead of through the ibus/fcitx XIM bridge (`ADOBE_WINE_IM=1` keeps it, for CJK input) |
 | Buttons, check boxes, radio buttons, combo boxes, scroll bars look like Windows 2000 | A Windows visual style is generated from your GTK theme at setup (`lib/msstyles/`): GTK draws the controls' states, the rest of Wine's Light theme is recoloured to your palette. `ae-linux theme` rebuilds it after you change the desktop theme |
 | Installers whose batch scripts end with a clean-up `del` fail (Maxon App: "Script execution failed for task: preflight") | `del` of a missing file leaves `%ERRORLEVEL%` at 0 as on Windows ([0008](patches/0008-cmd-del-keeps-errorlevel-0-for-missing-files.patch)) |
+| Adobe installer: clicking Install/Continue does nothing | The installer page attaches the button's action with `setAttribute("onclick", "…")`; Wine stored the text but never turned it into a handler. Such `on…` attributes now get a working event handler (and removing them clears it), as in IE 9-11 ([0009](patches/0009-mshtml-setAttribute-compiles-event-handlers.patch)) |
 | VC++ 2015-2022 redistributable setups fail: "Failed to load manifest as XML document" (0x80040111) | Wine's builtin `msxml2` re-claims `Msxml2.DOMDocument` & co. on every prefix update, but with Microsoft's MSXML 3 installed those MSXML 2.6 classes don't exist; the names are pointed back at MSXML 3, as on Windows |
 | Splash screen text panel boxed in a shadow | Compositor shadow turned off for borderless popups, as on Windows |
 | No CUDA / GPU sniffing confusion | DXVK, vkd3d-proton, DXVK-NVAPI and NVIDIA's CUDA/NVENC bridges from Proton-CachyOS |
@@ -117,7 +118,8 @@ adobe-wine PROGRAM.exe           run anything in the Adobe prefix (winecfg, rege
 ## How it works
 
 - `lib/patch_runner.py` applies the fixes in `patches/` as small binary patches to the
-  pinned runner build, refusing any file whose SHA-256 it does not know.
+  pinned runner build, refusing any file whose SHA-256 it does not know. Fixes that need new
+  code are assembled from `src/runner-caves/` (`build.py` writes `lib/mshtml_caves.py`).
 - `src/filedialog/` is a COM server registered (in the Adobe prefix only) for
   `CLSID_FileOpenDialog`/`CLSID_FileSaveDialog`; it hands each request to
   `lib/filechooser.py`, which talks to `org.freedesktop.portal.FileChooser`. Build it with
