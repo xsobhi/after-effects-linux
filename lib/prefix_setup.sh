@@ -35,8 +35,11 @@ link_runner_fonts() {  # link_runner_fonts PREFIX REG — what Proton's launcher
     # (D2D apps draw no text at all) and GDI+ cannot find Tahoma. Real files are kept, so
     # Microsoft's core fonts (corefonts) win over Proton's metric-compatible copies.
     # DirectWrite only knows fonts listed in the registry (Proton's template prefix lists
-    # them; wineboot does not), so register each linked file as Windows names it.
-    local dir font name style fonts=$1/drive_c/windows/Fonts
+    # them; wineboot does not), so register each linked file as Windows names it. Wine also
+    # lists its own fonts under "External Fonts" with the runner's path; once the file is
+    # in C:\windows\Fonts that record looks stale, and Wine's clean-up then deletes the
+    # same-named Windows entry too (Tahoma vanished, D2D text again). Drop those records.
+    local dir font name style fonts=$1/drive_c/windows/Fonts entries=()
     mkdir -p "$fonts"
     printf '\r\n[HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts]\r\n' >> "$2"
     for dir in "$RUNNER_DIR/files/share/fonts" "$RUNNER_DIR/files/share/wine/fonts"; do
@@ -50,8 +53,20 @@ link_runner_fonts() {  # link_runner_fonts PREFIX REG — what Proton's launcher
             style=$(fc-scan --format '%{weight} %{slant}\n' "$font" 2>/dev/null | head -1 |
                 awk '{s = ($1 >= 200 ? " Bold" : ""); if ($2 > 0) s = s " Italic"; print s}')
             printf '"%s%s (TrueType)"="%s"\r\n' "$name" "$style" "${font##*/}" >> "$2"
+            entries+=("$name$style (TrueType)")
         done
     done
+    printf '\r\n[HKEY_CURRENT_USER\\Software\\Wine\\Fonts\\External Fonts]\r\n' >> "$2"
+    for name in "${entries[@]}"; do printf '"%s"=-\r\n' "$name" >> "$2"; done
+}
+
+fix_fonts() {  # fix_fonts PREFIX — register the runner's fonts again (adobe-wine calls this)
+    local reg
+    reg=$(mktemp --suffix=.reg)
+    printf 'Windows Registry Editor Version 5.00\r\n' > "$reg"
+    link_runner_fonts "$1" "$reg"
+    import_reg "$1" "$reg"
+    rm -f "$reg"
 }
 
 msxml_progids() {  # msxml_progids PREFIX — version-independent MSXML names -> MSXML 3, as on Windows

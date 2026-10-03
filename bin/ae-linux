@@ -51,6 +51,8 @@ case "$cmd" in
             [[ -d "$prefix/drive_c/$d" ]] && dirs+=("$prefix/drive_c/$d")
         done
         python3 "$LIB_DIR/verify_adobe.py" --scan "${dirs[@]}" ;;
+    fonts)  # DirectWrite font list repair; adobe-wine runs it when Tahoma went missing
+        for p in "${@:-$DEFAULT_PREFIX}"; do fix_fonts "$p"; done ;;
     gui) exec "$here/ae-linux-gui" ;;
     *) sed -n '2,12s/^# \{0,1\}//p' "$0" ;;
 esac

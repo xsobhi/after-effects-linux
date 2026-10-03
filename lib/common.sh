@@ -8,6 +8,7 @@ APP_DIR="$ADOBE_WINE_HOME/app"       # installed copy of this repo (bin, lib, sh
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/adobe-wine"
 BIN_DIR="$HOME/.local/bin"
 APPS_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+export ADOBE_WINE_FONTFIX=1  # setup registers fonts itself: adobe-wine skips its font check
 
 # Proton-CachyOS build the binary patches in lib/patch_runner.py were made for.
 RUNNER_NAME="proton-cachyos-11.0-20260703-slr-x86_64"

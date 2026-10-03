@@ -15,6 +15,16 @@ if [[ ! -x "$WINE" ]]; then
     exit 1
 fi
 
+# DirectWrite only knows fonts in the registry's font list, and Tahoma is its last resort:
+# without that entry Direct2D programs (Video Copilot installers, FX Console) draw no text.
+# Wine's own font bookkeeping has removed it from prefixes before; put it back if missing.
+if [[ -n "${1:-}" && -z "${ADOBE_WINE_FONTFIX:-}" && -f "$WINEPREFIX/system.reg" ]] &&
+   ! awk '/^\[Software\\\\Microsoft\\\\Windows NT\\\\CurrentVersion\\\\Fonts\]/ {k = 1; next}
+          k && /^\[/ {exit 1}  k && /^"Tahoma \(TrueType\)"=/ {exit 0}  END {if (!k) exit 1}' \
+        "$WINEPREFIX/system.reg"; then
+    ADOBE_WINE_PREFIX="$WINEPREFIX" "$base/app/bin/ae-linux" fonts "$WINEPREFIX" >/dev/null 2>&1 || true
+fi
+
 # Library layout the Proton script normally sets up (GStreamer/FFmpeg for Media Foundation).
 lib="$files/lib"
 export ORIG_LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}"
