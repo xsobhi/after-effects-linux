@@ -1,0 +1,32 @@
+Subject: [PATCH] explorer: Open folders and /select in the desktop's file manager.
+
+Apps reveal files with ShellExecute("explorer.exe", "/select, \"FILE\"") - Adobe's dvaui
+does this for Media Encoder's output-file links (After Effects ships the same dvaui) - or
+open folders with "explorer.exe FOLDER". Wine showed its own file browser inside the
+prefix. Explorer now starts winereveal.exe (src/reveal) with the file to select, or the
+folder, and exits; winereveal converts the path to a Unix path and calls
+org.freedesktop.FileManager1.ShowItems/ShowFolders on the session bus (Nemo, Nautilus,
+Dolphin, Caja, ...), falling back to xdg-open on the folder. If winereveal.exe cannot be
+started, Wine's window opens as before. explorer /desktop and explorer without a folder
+are unchanged.
+
+Applied to the Proton-CachyOS 11.0 x86_64 explorer.exe as a binary patch by
+lib/patch_runner.py (lib/wine_caves.py); winereveal.exe is installed into system32 by
+lib/prefix_setup.sh.
+---
+--- a/programs/explorer/explorer.c	2026-10-03 11:38:55.011860784 +0300
++++ b/programs/explorer/explorer.c	2026-10-03 11:38:55.025128224 +0300
+@@ -933,6 +933,13 @@
+     if(parameters.root[0] && !PathIsDirectoryW(parameters.root))
+         if(ShellExecuteW(NULL,NULL,parameters.root,NULL,NULL,SW_SHOWDEFAULT) > (HINSTANCE)32)
+             ExitProcess(EXIT_SUCCESS);
++    /* Folders (and /select,FILE) open in the desktop's file manager through winereveal.exe;
++     * Wine's own window is the fallback when it cannot be started. */
++    if(parameters.root[0] && PathIsDirectoryW(parameters.root) &&
++       ShellExecuteW(NULL, NULL, L"winereveal.exe",
++                     parameters.selection[0] ? parameters.selection : parameters.root,
++                     NULL, SW_SHOWNORMAL) > (HINSTANCE)32)
++        ExitProcess(EXIT_SUCCESS);
+     init_info.dwSize = sizeof(INITCOMMONCONTROLSEX);
+     init_info.dwICC = ICC_USEREX_CLASSES | ICC_BAR_CLASSES | ICC_COOL_CLASSES;
+     if(!InitCommonControlsEx(&init_info))

@@ -20,6 +20,8 @@ run_winetricks() {  # run_winetricks PREFIX VERB...
 install_filedialog() {  # install_filedialog PREFIX REG
     local pfx=$1 reg=$2 clsid
     install -m 755 "$APP_DIR/filedialog.dll" "$pfx/drive_c/windows/system32/adobe-filedialog.dll"
+    # explorer.exe hands folder windows / "explorer /select,FILE" to it (patches/0013)
+    install -m 755 "$APP_DIR/winereveal.exe" "$pfx/drive_c/windows/system32/winereveal.exe"
     for clsid in "${FILEDIALOG_CLSIDS[@]}"; do
         printf '\r\n[HKEY_LOCAL_MACHINE\\Software\\Classes\\CLSID\\%s\\InprocServer32]\r\n' "$clsid"
         printf '@="C:\\\\windows\\\\system32\\\\adobe-filedialog.dll"\r\n"ThreadingModel"="Apartment"\r\n'

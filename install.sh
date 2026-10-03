@@ -44,8 +44,9 @@ cp -a "$repo/bin" "$repo/lib" "$repo/share" "$APP_DIR.new/"
 zig=${ZIG:-$(command -v zig || true)}
 if [[ -n "$zig" ]]; then
     ZIG="$zig" "$repo/src/filedialog/build.sh" "$APP_DIR.new/filedialog.dll" >/dev/null
+    ZIG="$zig" "$repo/src/reveal/build.sh" "$APP_DIR.new/winereveal.exe" >/dev/null
 else
-    cp "$repo/prebuilt/filedialog.dll" "$APP_DIR.new/filedialog.dll"
+    cp "$repo/prebuilt/filedialog.dll" "$repo/prebuilt/winereveal.exe" "$APP_DIR.new/"
 fi
 rm -rf "$APP_DIR"
 mv "$APP_DIR.new" "$APP_DIR"

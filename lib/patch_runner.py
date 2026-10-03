@@ -34,15 +34,15 @@ Fixes (source-level descriptions in patches/*.patch):
           text looked like Windows 98. Aliased (1-bit) text keeps full hinting.
   server  ACEs matching the current user set a folder's Unix write bits whatever its owner
           SID (Adobe installers made "caps" read-only in older prefixes: error 105).
-  crypt32 base64 text of a multiple of 48 bytes ends with one line break, not two (no NUL;
-          Red Giant licence requests failed and AME/AE hung loading Trapcode plugins).
+  crypt32 base64 of 48*n bytes ends with one line break, not two (Red Giant licence hang).
+  explorer folder windows and /select,FILE open in the Linux file manager (winereveal.exe).
 """
 import hashlib
 import os
 import shutil
 import sys
 
-from crypt32_caves import CRYPT32_64
+from wine_caves import CRYPT32_64, EXPLORER_64
 from mshtml_caves import ONEVENT32, ONEVENT64
 
 CAVE64 = ('448b4ddc4181f9bb0100000f849effffff4183f9500f8494ffffff488d75e0e9b4ffffff')
@@ -150,6 +150,7 @@ PATCHES = {
             (0x33db4, '0f8516010000', 'e91701000090'),  # allow ACE: the same
         ]),
     'lib/wine/x86_64-windows/crypt32.dll': CRYPT32_64,
+    'lib/wine/x86_64-windows/explorer.exe': EXPLORER_64,
 }
 HERE = os.path.dirname(os.path.abspath(__file__))
 
