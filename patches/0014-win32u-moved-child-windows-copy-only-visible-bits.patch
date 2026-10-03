@@ -1,0 +1,98 @@
+Subject: [PATCH] win32u: Moved child windows copy only the bits that were visible.
+
+When a child window moves within its parent's window surface, move_window_bits() copied
+its whole old rectangle. If the window is larger than the visible part of its parent,
+the hidden part of that rectangle shows other windows, and those pixels were copied into
+the visible area. wineserver's exposure (new minus old visible region, without the move
+offset) does not invalidate that area either, so it stayed wrong until the application
+happened to repaint.
+
+After Effects scrolls its stacked panel groups (Info, Audio, Preview, Effects & Presets)
+by moving tall child windows: every scroll step showed a strip of the timeline below the
+panel inside the Effects & Presets list, i.e. heavy ghosting while scrolling.
+
+Only the part inside the parent DC's clip box is copied now and the rest of the
+destination is invalidated, as on Windows. Wine flushes window surfaces whenever the app
+looks idle (e.g. PeekMessage for input only), which showed the not yet repainted strip
+for a frame; idle flushes are now skipped for up to 40 ms after such an invalidation so
+the repaint lands first.
+
+Applied to the Proton-CachyOS 11.0 x86_64 win32u.so as a binary patch by
+lib/patch_runner.py (lib/wine_caves.py, source src/runner-caves/win32u-move.s).
+---
+--- a/dlls/win32u/dce.c	2026-10-03 12:27:43.644835022 +0300
++++ b/dlls/win32u/dce.c	2026-10-03 12:27:43.655242345 +0300
+@@ -765,12 +765,21 @@
+  *
+  * Flush pending output from all window surfaces.
+  */
++static DWORD last_move_repaint;  /* tick count when move_window_bits() invalidated bits */
++
+ void flush_window_surfaces( BOOL idle )
+ {
+     static DWORD last_idle;
+     DWORD now;
+     struct window_surface *surface;
+ 
++    /* let the app repaint what move_window_bits() could not copy before showing the frame */
++    if (idle && last_move_repaint)
++    {
++        if (NtGetTickCount() - last_move_repaint < 40) return;
++        last_move_repaint = 0;
++    }
++
+     pthread_mutex_lock( &surfaces_lock );
+     now = NtGetTickCount();
+     if (idle) last_idle = now;
+@@ -1700,6 +1709,43 @@
+     return need_erase;
+ }
+ 
++/* Only the part of a moved child window that was visible in its parent holds the window's
++ * bits; the rest of the old rectangle shows whatever is outside the parent. Copy only the
++ * visible part and invalidate the rest of the destination: wineserver's exposure does not
++ * account for the move offset, so it would never be repainted. */
++static void clip_moved_window_bits( HWND hwnd, const struct window_rects *rects, RECT *src, RECT *dst )
++{
++    HWND parent = NtUserGetAncestor( hwnd, GA_PARENT );
++    int dx = dst->left - src->left, dy = dst->top - src->top;
++    RECT clip, full = *dst;
++    HRGN full_rgn, copied_rgn;
++    HDC hdc;
++    INT ret;
++
++    if (!parent || parent == get_desktop_window()) return;
++    if (!(hdc = NtUserGetDCEx( parent, 0, DCX_CACHE ))) return;
++    ret = NtGdiGetAppClipBox( hdc, &clip );
++    NtUserReleaseDC( parent, hdc );
++    if (ret == ERROR) return;
++
++    src->left   = max( src->left, clip.left );
++    src->top    = max( src->top, clip.top );
++    src->right  = max( min( src->right, clip.right ), src->left );
++    src->bottom = max( min( src->bottom, clip.bottom ), src->top );
++    *dst = *src;
++    OffsetRect( dst, dx, dy );
++    if (EqualRect( dst, &full )) return;
++
++    full_rgn = NtGdiCreateRectRgn( full.left, full.top, full.right, full.bottom );
++    copied_rgn = NtGdiCreateRectRgn( dst->left, dst->top, dst->right, dst->bottom );
++    NtGdiCombineRgn( full_rgn, full_rgn, copied_rgn, RGN_DIFF );
++    NtGdiOffsetRgn( full_rgn, -rects->client.left, -rects->client.top );
++    NtUserRedrawWindow( hwnd, NULL, full_rgn, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_FRAME );
++    last_move_repaint = NtGetTickCount() | 1;
++    NtGdiDeleteObjectApp( full_rgn );
++    NtGdiDeleteObjectApp( copied_rgn );
++}
++
+ /***********************************************************************
+  *           move_window_bits
+  *
+@@ -1712,6 +1758,7 @@
+     if (src.left - rects->visible.left != dst.left - rects->visible.left ||
+         src.top - rects->visible.top != dst.top - rects->visible.top)
+     {
++        clip_moved_window_bits( hwnd, rects, &src, &dst );
+         UINT flags = UPDATE_NOCHILDREN | UPDATE_CLIPCHILDREN;
+         HRGN rgn = get_update_region( hwnd, &flags, NULL );
+         HDC hdc = NtUserGetDCEx( hwnd, rgn, DCX_CACHE | DCX_WINDOW | DCX_EXCLUDERGN );

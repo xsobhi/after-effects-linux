@@ -22,6 +22,8 @@ Fixes (source-level descriptions in patches/*.patch):
           without GLX_OML_sync_control (NVIDIA) the copy showed the previous frame.
   win32u  menus in the theme's colours: disabled items without the white "engraved"
           shadow, the hot item in the menu-highlight colour, roomier popup rows.
+          Moved child windows only copy what was visible in the parent and get the rest
+          repainted before the next idle flush (no ghosting when AE scrolls panel stacks).
   cmd     DEL of a file that does not exist (or cannot be deleted) leaves ERRORLEVEL at
           0 as on Windows; Wine set 1, so installer scripts ending in a cleanup DEL
           "failed" (Maxon App: err.sys.script-execution-failed, preflight).
@@ -42,7 +44,7 @@ import os
 import shutil
 import sys
 
-from wine_caves import CRYPT32_64, EXPLORER_64
+from wine_caves import CRYPT32_64, EXPLORER_64, WIN32U_64
 from mshtml_caves import ONEVENT32, ONEVENT64
 
 CAVE64 = ('448b4ddc4181f9bb0100000f849effffff4183f9500f8494ffffff488d75e0e9b4ffffff')
@@ -86,14 +88,7 @@ PATCHES = {
             (0x3fbfb, 'e890f1ffff', '31c00f1f00'),     # GetWindowStyleMasks: HasWindowManager("Mutter") -> 0
             (0x3fe29, 'e862efffff', '31c00f1f00'),     # set_mwm_hints: same check
         ]),
-    'lib/wine/x86_64-unix/win32u.so': (
-        'cc68ef24f80d15ff4fc7df598910a1437b09f4a64dcca83594678dbebe75a1a8', [
-            (0x100b40, '7440', 'eb40'),                # draw_menu_item: grayed text, no emboss
-            (0x100bf4, '7424', 'eb24'),                # ... and its shortcut text
-            (0x100c90, 'bf0e000000', 'bf07000000'),    # hot item text: COLOR_MENUTEXT
-            (0x100ead, 'bf0d000000', 'bf1d000000'),    # hot item fill: COLOR_MENUHILIGHT
-            (0xff6be, '8d5004', '8d5008'),             # calc_menu_item_size: row = text + 8
-        ]),
+    'lib/wine/x86_64-unix/win32u.so': WIN32U_64,             # menus, window moves
     'lib/wine/x86_64-unix/dwrite.so': (
         '53c6bd6df0d517af6320819f9c138231ce876f35e38fa7ca13582996d75faa1e', [
             # get_glyph_bitmap: FT_Load_Glyph flags from glyph_load_flags (both call sites)
