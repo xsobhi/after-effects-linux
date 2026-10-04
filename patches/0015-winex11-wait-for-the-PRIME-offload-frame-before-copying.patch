@@ -1,0 +1,38 @@
+Subject: [PATCH] winex11: Wait for the PRIME offload frame before copying offscreen GL.
+
+On hybrid laptops the NVIDIA driver renders with PRIME render offload: after a swap it
+hands the finished frame to the X server from its own X connection, asynchronously. Wine
+copies the offscreen drawable of a child window (After Effects' composition viewer) into
+the toplevel right after the swap, over gdi_display, so the copy often overtook the
+driver and read the previous frame. glFinish (0007) only waits for the GPU, not for the
+driver's hand-off.
+
+Measured with a GL child window presenting a new colour at 30 fps and reading the screen
+back 25 ms later: 4-20 of 90 frames never reached the screen (they showed the previous
+colour until the next frame); with the Intel GPU, or with a 1 ms pause after the swap,
+none did. In After Effects the viewer of a moving-layer comp went from 22 to 27 updates
+per second (30 fps comp; 27 is also what the Intel GPU reaches) and long playhead stalls
+dropped from 48 to 19 in 25 s.
+
+Pause 2 ms after glFinish/XFlush on this path (offscreen drawable, no
+GLX_OML_sync_control). Applied to the Proton-CachyOS 11.0 build as a binary patch by
+lib/patch_runner.py.
+---
+--- a/dlls/winex11.drv/opengl.c
++++ b/dlls/winex11.drv/opengl.c
+@@ -1483,12 +1483,17 @@
+         if (pglXWaitForSbcOML) pglXWaitForSbcOML( gdi_display, gl->drawable, target_sbc, &ust, &msc, &sbc );
+     }
+ 
+     if (offscreen && !pglXWaitForSbcOML)
+     {
+         /* no GLX_OML_sync_control (NVIDIA): make sure the swap is done before the copy */
+         funcs->p_glFinish();
+         XFlush( gdi_display );
++        /* PRIME render offload delivers the frame to the X server from the driver's own
++         * connection; give it a moment, or the copy below reads the previous frame */
++        poll( NULL, 0, 2 );
+     }
+ 
+     client_surface_present( base->client );
+     return TRUE;

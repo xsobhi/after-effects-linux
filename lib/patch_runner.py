@@ -5,7 +5,8 @@ Usage: patch_runner.py RUNNER_FILES_DIR      (the runner's "files" directory)
 
 Each patch lists its file offset with the original and the patched bytes, and the file's
 SHA-256 before patching, so an unknown build is refused instead of being corrupted.
-Running it again on an already patched runner changes nothing.
+Running it again on an already patched runner changes nothing; a runner patched by an
+older version is reverted first (entries may list the bytes older versions wrote).
 
 Fixes (source-level descriptions in patches/*.patch):
   winmm   DRV_QUERYFUNCTIONINSTANCEIDSIZE stores a ULONG like Windows, not 8 bytes
@@ -20,6 +21,8 @@ Fixes (source-level descriptions in patches/*.patch):
           that off there; Muffin says "Mutter (Muffin)"). Offscreen OpenGL child windows
           (AE's viewer) swap without vsync and glFinish before Wine copies them on screen:
           without GLX_OML_sync_control (NVIDIA) the copy showed the previous frame.
+          Under PRIME render offload they also pause 2 ms after the swap, so the frame the
+          driver hands over on its own X connection has arrived (viewer 22 -> 27 fps).
   win32u  menus in the theme's colours: disabled items without the white "engraved"
           shadow, the hot item in the menu-highlight colour, roomier popup rows.
           Moved child windows only copy what was visible in the parent and get the rest
@@ -69,18 +72,22 @@ PATCHES = {
         'fa03c9c29de8af9eaf64ad9ddbc03954e1c10925c70072fee3cabd32db4ee02f', [
             (0x44d4c, 'e81ff1ffff', '31c00f1f00'),     # GetWindowStyleMasks: HasWindowManager("Mutter") -> 0
             (0x44f2e, 'e83defffff', '31c00f1f00'),     # set_mwm_hints: same check
-            # x11drv_surface_swap: XFlush -> call glfinish_flush below
-            (0x35110, '498b7d00e8f77dfdff', 'e8ebdf02000f1f4000'),
+            # x11drv_surface_swap: XFlush -> call glfinish_wait below
+            (0x35110, '498b7d00e8f77dfdff', 'e82be002000f1f4000', ['e8ebdf02000f1f4000']),
             # glfinish_flush: sub rsp,8; funcs->p_glFinish(); XFlush(*r13 = gdi_display); ret
             (0x63100, '00' * 31, '4883ec08488b0595ed0100ff9070080000498b7d00e8f69dfaff4883c408c3'),
+            # glfinish_wait: glfinish_flush(); poll(NULL, 0, 2). Under PRIME render offload the
+            # NVIDIA driver hands the finished frame to the X server from its own connection,
+            # so Wine's copy right after the swap often read the previous frame (patches/0015)
+            (0x63140, '00' * 28, '4883ec08e8b7ffffff31ff31f6ba02000000e8399afaff4883c408c3'),
             # x11drv_surface_flush: interval = offscreen_interval()
             (0x35420, '458b6c2434', 'e8fbdc0200'),
             # offscreen_interval: r13d = base->interval, or 0 if base->client->offscreen.
             # The offscreen copy is presented by Wine, not by the driver; with vsync the
             # driver finishes the swap at the next vblank, after Wine already copied.
             (0x63120, '00' * 26, '458b6c2434498b4424204885c0740a8b402c85c0740345' + '31edc3'),
-            (0x98, 'f1700500', '3a710500'),            # code segment p_filesz/p_memsz
-            (0xa0, 'f1700500', '3a710500'),            # ... now include both helpers
+            (0x98, 'f1700500', '5c710500', ['3a710500']),            # code segment p_filesz/p_memsz
+            (0xa0, 'f1700500', '5c710500', ['3a710500']),            # ... now include the three helpers
         ]),
     # 32-bit programs (installers, most plugin installers) use their own unix libraries.
     'lib/wine/i386-unix/winex11.so': (
@@ -153,14 +160,16 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 def patch_file(path, original_sha, patches):
     with open(path, 'rb') as f:
         data = bytearray(f.read())
-    if all(data[o:o + len(bytes.fromhex(new))] == bytes.fromhex(new) for o, _, new in patches):
+    # entries: (offset, original, new[, values older patch sets wrote there])
+    if all(data[p[0]:p[0] + len(bytes.fromhex(p[2]))] == bytes.fromhex(p[2]) for p in patches):
         return 'already patched'
-    for offset, old, new in patches:        # undo an older patch set so new entries can be added
-        if data[offset:offset + len(bytes.fromhex(new))] == bytes.fromhex(new):
-            data[offset:offset + len(bytes.fromhex(new))] = bytes.fromhex(old)
+    for offset, old, new, *older in patches:    # undo an older patch set so new entries can be added
+        for value in [new] + (older[0] if older else []):
+            if data[offset:offset + len(bytes.fromhex(value))] == bytes.fromhex(value):
+                data[offset:offset + len(bytes.fromhex(value))] = bytes.fromhex(old)
     if hashlib.sha256(data).hexdigest() != original_sha:
         raise SystemExit(f'{path}: unexpected build (need Proton {RUNNER}); not patching')
-    for offset, old, new in patches:
+    for offset, old, new, *_ in patches:
         old, new = bytes.fromhex(old), bytes.fromhex(new)
         assert len(old) == len(new) and data[offset:offset + len(old)] == old, hex(offset)
         data[offset:offset + len(new)] = new
