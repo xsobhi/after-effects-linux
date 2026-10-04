@@ -41,6 +41,8 @@ Fixes (source-level descriptions in patches/*.patch):
           SID (Adobe installers made "caps" read-only in older prefixes: error 105).
   crypt32 base64 of 48*n bytes ends with one line break, not two (Red Giant licence hang).
   explorer folder windows and /select,FILE open in the Linux file manager (winereveal.exe).
+  opencl  the OpenCL bridge is replaced by one built with OpenCL (src/opencl), so programs
+          see the system's OpenCL devices (Proton's has none).
 """
 import hashlib
 import os
@@ -192,9 +194,37 @@ def install_gecko_prefs(files):
             print(f'  gecko prefs -> {entry}')
 
 
+# Proton-CachyOS builds Wine's OpenCL bridge without OpenCL: programs never see a device.
+# prebuilt/opencl.so is the same Wine 11.0 source built against libOpenCL.so.1 (src/opencl).
+OPENCL_STUB = 'ee9ac882322c219993e94e7bb4d371909873a42c0b926852cba76fd909531fc3'
+LIBOPENCL = ('/usr/lib/x86_64-linux-gnu/libOpenCL.so.1', '/usr/lib64/libOpenCL.so.1', '/usr/lib/libOpenCL.so.1')
+
+
+def sha256(path):
+    with open(path, 'rb') as f:
+        return hashlib.sha256(f.read()).hexdigest()
+
+
+def install_opencl(files):
+    dst = os.path.join(files, 'lib/wine/x86_64-unix/opencl.so')
+    src = os.path.join(HERE, '..', 'prebuilt', 'opencl.so')
+    if not any(os.path.exists(p) for p in LIBOPENCL):
+        return 'system has no libOpenCL.so.1 (package ocl-icd-libopencl1): kept'
+    current = sha256(dst)
+    if current == sha256(src):
+        return 'already replaced'
+    if current != OPENCL_STUB:
+        return 'unexpected build: kept'
+    shutil.copyfile(src, dst + '.tmp')
+    os.chmod(dst + '.tmp', 0o755)
+    os.replace(dst + '.tmp', dst)
+    return 'OpenCL bridge built with OpenCL installed'
+
+
 def main(files):
     for rel, (sha, patches) in PATCHES.items():
         print(f'  {rel}: {patch_file(os.path.join(files, rel), sha, patches)}')
+    print(f'  lib/wine/x86_64-unix/opencl.so: {install_opencl(files)}')
     install_gecko_prefs(files)
 
 
