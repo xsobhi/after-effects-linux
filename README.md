@@ -55,15 +55,41 @@ not touched.
 ## Install
 
 ```sh
-sudo apt install python3-gi python3-xlib python3-cryptography curl xz-utils cabextract unzip zenity xdg-utils
 git clone https://github.com/xsobhi/after-effects-linux.git
-cd after-effects-linux
-./install.sh
 ```
 
-`install.sh` downloads the pinned Proton-CachyOS build (SHA-256 checked), patches it,
-installs the tools to `~/.local/share/adobe-wine/app` and sets up every Wine prefix where it
-finds an After Effects / Media Encoder (or creates `~/.local/share/adobe-wine/prefix`).
+Then open the folder in your file manager and double-click **`install.sh`** (choose *Run*),
+or run `./install.sh --gui`. The installer window walks you through it:
+
+1. **Welcome** — checks the system packages it needs and installs missing ones for you
+   (asks for your password), and lists the Adobe apps it already finds in Wine prefixes.
+2. **Wine** — lists every Wine on the computer (system Wine, Steam and Heroic Proton,
+   Lutris, Bottles, PlayOnLinux), marking the machine's default one. The recommended
+   choice is preselected: Proton-CachyOS 11.0 with this project's fixes, downloaded if
+   needed (SHA-256 checked). Any other Wine works without those fixes.
+3. **Locations** — where the Windows environment (Wine prefix with your Adobe apps,
+   plugins and presets; ~15 GB) and the Wine download go, with the free space shown.
+4. **Adobe installer and options** — optionally your Adobe `Set-up.exe` to run right
+   after setup; menu entries, opening `.exe`/`.msi` files with this Wine, desktop theme,
+   NVIDIA GPU.
+5. **Install** — progress and a detailed log.
+
+Afterwards, **double-click any Windows installer** — another Adobe app, plugins (Red
+Giant, Boris FX, Video Copilot, Maxon…) or presets — and it installs into this Wine, where
+After Effects finds it. Run **After Effects Linux Setup** from the menu to change the
+settings later.
+
+From a terminal, the same choices are options (saved in `~/.config/adobe-wine/config`):
+
+```sh
+sudo apt install python3-gi python3-xlib python3-cryptography curl xz-utils cabextract unzip zenity xdg-utils
+./install.sh [--prefix DIR] [--runner-dir DIR] [--wine DIR] [--adobe-installer Set-up.exe] \
+             [--no-nvidia] [--no-theme] [--no-menu] [--no-exe-handler]
+```
+
+`install.sh` downloads the pinned Proton-CachyOS build, patches it, installs the tools to
+`~/.local/share/adobe-wine/app` and sets up every Wine prefix where it finds an After
+Effects / Media Encoder (or creates the chosen prefix).
 
 ### Installing After Effects
 

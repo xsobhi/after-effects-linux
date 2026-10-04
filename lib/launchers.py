@@ -155,8 +155,10 @@ def install_mime(mtype, comment, globs):
 if __name__ == '__main__':
     if len(sys.argv) != 2:
         sys.exit(__doc__)
-    install_exe_handler()
-    with open(sys.argv[1]) as f:
-        for app in json.load(f):
-            install(app)
+    if os.environ.get('ADOBE_WINE_EXE_HANDLER', '1') != '0':
+        install_exe_handler()
+    if os.environ.get('ADOBE_WINE_MENU', '1') != '0':
+        with open(sys.argv[1]) as f:
+            for app in json.load(f):
+                install(app)
     subprocess.run(['update-desktop-database', os.path.join(DATA, 'applications')], check=False)

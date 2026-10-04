@@ -14,7 +14,7 @@ run_winetricks() {  # run_winetricks PREFIX VERB...
     local wt="$CACHE_DIR/winetricks-$WINETRICKS_VERSION"
     download "$WINETRICKS_URL" "$WINETRICKS_SHA256" "$wt"
     chmod +x "$wt"
-    WINEPREFIX="$1" WINE="$BIN_DIR/adobe-wine" WINESERVER="$RUNNER_DIR/files/bin/wineserver" \
+    WINEPREFIX="$1" WINE="$BIN_DIR/adobe-wine" WINESERVER="$WINESERVER_BIN" \
         ADOBE_WINE_PREFIX="$1" "$wt" -q --unattended "${@:2}" > "$CACHE_DIR/winetricks.log" 2>&1 ||
         die "winetricks ${*:2} failed; see $CACHE_DIR/winetricks.log"
 }
@@ -36,7 +36,7 @@ installed_copy() {  # installed_copy FONT — the same face installed on the des
     [[ -n "$fam" ]] || return 0
     fam=$(sed 's/[\\:,=-]/\\&/g' <<< "$fam")
     fc-list --format '%{file}\n' "$fam:weight=$weight:slant=$slant" 2>/dev/null |
-        { grep -v "^$RUNNER_DIR/" || true; } | LC_ALL=C sort | head -1
+        { grep -v "^$(dirname "$(readlink -f "$1")")/" || true; } | LC_ALL=C sort | head -1
 }
 
 link_runner_fonts() {  # link_runner_fonts PREFIX REG — what Proton's launcher script does
@@ -57,7 +57,7 @@ link_runner_fonts() {  # link_runner_fonts PREFIX REG — what Proton's launcher
     local dir font target name style fonts=$1/drive_c/windows/Fonts entries=()
     mkdir -p "$fonts"
     printf '\r\n[HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts]\r\n' >> "$2"
-    for dir in "$RUNNER_DIR/files/share/fonts" "$RUNNER_DIR/files/share/wine/fonts"; do
+    for dir in "$RUNNER_FILES/share/fonts" "$RUNNER_FILES/share/wine/fonts"; do
         for font in "$dir"/*.ttf "$dir"/*.ttc; do
             [[ -e "$font" ]] || continue
             [[ -e "$fonts/${font##*/}" && ! -L "$fonts/${font##*/}" ]] && continue
@@ -196,8 +196,10 @@ setup_prefix() {  # setup_prefix PREFIX
     done
     stop_prefix "$pfx"
     rm -f "$reg"
-    say "Matching the desktop theme, fonts and folders"
-    apply_theme "$pfx"
+    if [[ "${ADOBE_WINE_THEME:-1}" != 0 ]]; then
+        say "Matching the desktop theme, fonts and folders"
+        apply_theme "$pfx"
+    fi
     "$LIB_DIR/user_folders.sh" "$pfx"
     gecko_prefs "$pfx"
 }

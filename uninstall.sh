@@ -28,7 +28,7 @@ if [[ "${1:-}" == --all ]]; then
     read -r -p "Also delete the runner and the default prefix $DEFAULT_PREFIX (installed Adobe apps)? [y/N] " answer
     if [[ "$answer" == [yY] ]]; then
         stop_prefix "$DEFAULT_PREFIX"
-        rm -rf "$RUNNER_DIR" "$DEFAULT_PREFIX"
+        rm -rf "$RUNNER_DIR" "$DEFAULT_PREFIX" "$ADOBE_WINE_CONFIG"
         say "Deleted the runner and the default prefix."
     fi
 fi

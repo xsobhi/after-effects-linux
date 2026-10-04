@@ -1,9 +1,8 @@
 # Shared settings for install.sh and ae-linux (sourced, not executed).
 # shellcheck shell=bash
 
-ADOBE_WINE_HOME="${ADOBE_WINE_HOME:-$HOME/.local/share/adobe-wine}"
-RUNNER_DIR="$ADOBE_WINE_HOME/runner"
-DEFAULT_PREFIX="$ADOBE_WINE_HOME/prefix"
+# shellcheck source=paths.sh
+source "${LIB_DIR:-$(dirname "${BASH_SOURCE[0]}")}/paths.sh"
 APP_DIR="$ADOBE_WINE_HOME/app"       # installed copy of this repo (bin, lib, share)
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/adobe-wine"
 BIN_DIR="$HOME/.local/bin"
@@ -43,6 +42,7 @@ wine_in() {  # wine_in PREFIX ARGS... — run the patched runner in a given pref
 }
 
 stop_prefix() {
-    WINEPREFIX="$1" "$RUNNER_DIR/files/bin/wineserver" -k 2>/dev/null || true
-    WINEPREFIX="$1" timeout 30s "$RUNNER_DIR/files/bin/wineserver" -w 2>/dev/null || true
+    [[ -n "$WINESERVER_BIN" ]] || return 0
+    WINEPREFIX="$1" "$WINESERVER_BIN" -k 2>/dev/null || true
+    WINEPREFIX="$1" timeout 30s "$WINESERVER_BIN" -w 2>/dev/null || true
 }

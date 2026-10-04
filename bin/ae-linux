@@ -15,9 +15,9 @@ LIB_DIR=$(readlink -f "$here/../lib")
 # shellcheck source=../lib/common.sh
 source "$LIB_DIR/common.sh"
 source "$LIB_DIR/prefix_setup.sh"
-[[ -e /dev/nvidiactl ]] && NVIDIA=1
+[[ -e /dev/nvidiactl && "${ADOBE_WINE_NVIDIA:-1}" != 0 ]] && NVIDIA=1
 
-found_json() { python3 "$LIB_DIR/scan.py" --json "$@"; }
+found_json() { ADOBE_WINE_DEFAULT_PREFIX="$DEFAULT_PREFIX" python3 "$LIB_DIR/scan.py" --json "$@"; }
 
 found_prefixes() {  # prefixes holding installs
     found_json "$@" | python3 -c 'import json,sys; [print(p) for p in dict.fromkeys(a["prefix"] for a in json.load(sys.stdin))]'
@@ -27,7 +27,8 @@ make_launchers() {
     local json
     json=$(mktemp --suffix=.json)
     found_json "$@" > "$json"
-    python3 "$LIB_DIR/launchers.py" "$json"
+    ADOBE_WINE_MENU="${ADOBE_WINE_MENU:-1}" ADOBE_WINE_EXE_HANDLER="${ADOBE_WINE_EXE_HANDLER:-1}" \
+        python3 "$LIB_DIR/launchers.py" "$json"
     rm -f "$json"
 }
 

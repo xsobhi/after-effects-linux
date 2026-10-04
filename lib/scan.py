@@ -12,7 +12,8 @@ import struct
 import sys
 
 HOME = os.path.expanduser('~')
-SEARCH = [
+SEARCH = [os.environ['ADOBE_WINE_DEFAULT_PREFIX']] if os.environ.get('ADOBE_WINE_DEFAULT_PREFIX') else []
+SEARCH += [
     '~/.local/share/adobe-wine/prefix', '~/.wine', '~/.local/share/wineprefixes/*',
     '~/Games/*', '~/Games/*/*', '~/Games/Heroic/Prefixes/*/*', '~/.PlayOnLinux/wineprefix/*',
     '~/.local/share/bottles/bottles/*', '~/.var/app/com.usebottles.bottles/data/bottles/bottles/*',

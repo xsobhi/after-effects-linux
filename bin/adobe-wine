@@ -1,41 +1,47 @@
 #!/usr/bin/env bash
-# Run a Windows program in the Adobe Wine prefix with the patched runner.
+# Run a Windows program in the Adobe Wine prefix with the chosen Wine (by default the
+# patched runner; see lib/paths.sh for the installer's settings).
 #   adobe-wine PROGRAM.exe [ARGS...]      (any wine command works: winecfg, regedit, ...)
 # Environment overrides: ADOBE_WINE_PREFIX, ADOBE_WINE_NO_OFFLOAD=1 (virtual displays),
 # ADOBE_WINE_IM=1 (keep the ibus/fcitx input method).
 set -euo pipefail
-base="${ADOBE_WINE_HOME:-$HOME/.local/share/adobe-wine}"
-files="$base/runner/files"
-export WINEPREFIX="${ADOBE_WINE_PREFIX:-$base/prefix}"
-export WINE="$files/bin/wine" WINESERVER="$files/bin/wineserver"
-export PATH="$files/bin:$PATH"
+here=$(dirname "$(readlink -f "$0")")
+# shellcheck source=../lib/paths.sh
+source "$here/../lib/paths.sh"
+base=$ADOBE_WINE_HOME
+files=$RUNNER_FILES
+export WINEPREFIX="${ADOBE_WINE_PREFIX:-$DEFAULT_PREFIX}"
+export WINE="$WINE_BIN" WINESERVER="$WINESERVER_BIN"
+[[ "$files" == /usr ]] || export PATH="$files/bin:$PATH"
 export WINEDEBUG="${WINEDEBUG:--all}"
 if [[ ! -x "$WINE" ]]; then
-    printf 'The Adobe Wine runner is missing: %s\nRun install.sh first.\n' "$WINE" >&2
+    printf 'The Wine for Adobe apps is missing: %s\nRun the installer (install.sh) again.\n' "$WINE" >&2
     exit 1
 fi
 
 # Fonts (lib/fonts.sh): DirectWrite's last-resort Tahoma missing from the registry (Direct2D
 # programs draw no text), fonts installed or removed on the desktop since the last start
 # (Adobe apps must list them afresh), or a Wine font substitute hiding an installed font.
-if [[ -n "${1:-}" && -z "${ADOBE_WINE_FONTFIX:-}" && -f "$base/app/lib/fonts.sh" ]]; then
+if [[ -n "${1:-}" && -z "${ADOBE_WINE_FONTFIX:-}" && -f "$here/../lib/fonts.sh" ]]; then
     # shellcheck source=../lib/fonts.sh
-    source "$base/app/lib/fonts.sh"
+    source "$here/../lib/fonts.sh"
     if fonts_need_update "$WINEPREFIX"; then
-        ADOBE_WINE_PREFIX="$WINEPREFIX" "$base/app/bin/ae-linux" fonts "$WINEPREFIX" >/dev/null 2>&1 || true
+        ADOBE_WINE_PREFIX="$WINEPREFIX" "$here/ae-linux" fonts "$WINEPREFIX" >/dev/null 2>&1 || true
     fi
 fi
 
 # Library layout the Proton script normally sets up (GStreamer/FFmpeg for Media Foundation).
 lib="$files/lib"
 export ORIG_LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}"
-export LD_LIBRARY_PATH="$lib/x86_64-linux-gnu:$lib/i386-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-export WINEDLLPATH="$lib/vkd3d:$lib/wine:$lib/wine/nvidia-libs/nvml/wine"
-export GST_PLUGIN_SYSTEM_PATH_1_0="$lib/x86_64-linux-gnu/gstreamer-1.0:$lib/i386-linux-gnu/gstreamer-1.0"
+if [[ "$files" != /usr && -d "$lib/x86_64-linux-gnu" ]]; then     # Proton builds only
+    export LD_LIBRARY_PATH="$lib/x86_64-linux-gnu:$lib/i386-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    export WINEDLLPATH="$lib/vkd3d:$lib/wine:$lib/wine/nvidia-libs/nvml/wine"
+    export GST_PLUGIN_SYSTEM_PATH_1_0="$lib/x86_64-linux-gnu/gstreamer-1.0:$lib/i386-linux-gnu/gstreamer-1.0"
+fi
 export WINE_GST_REGISTRY_DIR="$base/cache/gstreamer-1.0"
 
 # Render OpenGL, EGL, Vulkan and CUDA on the NVIDIA GPU of hybrid laptops.
-if [[ -z "${ADOBE_WINE_NO_OFFLOAD:-}" ]] && [[ -e /dev/nvidiactl ]]; then
+if [[ -z "${ADOBE_WINE_NO_OFFLOAD:-}" && "${ADOBE_WINE_NVIDIA:-1}" != 0 ]] && [[ -e /dev/nvidiactl ]]; then
     export __NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia
     export __VK_LAYER_NV_optimus=NVIDIA_only
     [[ -e /usr/share/glvnd/egl_vendor.d/10_nvidia.json ]] &&
@@ -57,7 +63,7 @@ mkdir -p "$base/cache/dxvk" "$base/cache/nvidia" "$WINE_GST_REGISTRY_DIR"
 
 # filedialog.dll (Open/Save dialogs) runs this helper to show the desktop's file chooser;
 # its calls are traced to %TEMP%\adobe-filedialog.log (small, only when dialogs open).
-export ADOBE_FILECHOOSER="$base/app/lib/filechooser.py"
+export ADOBE_FILECHOOSER="$here/../lib/filechooser.py"
 export ADOBE_FILEDIALOG_LOG="${ADOBE_FILEDIALOG_LOG:-1}"
 
 # Proton names every X11 window "steam_proton" unless SteamAppId is set; give each
@@ -76,7 +82,7 @@ if [[ -n "$exe" ]]; then
         [[ "$WINEDEBUG" == -all ]] && export WINEDEBUG="-all,err+all,trace+xdnd,trace+clipboard"
         exec >> "$ADOBE_WINE_LOG" 2>&1
     fi
-    helper="$base/app/lib/wm_helper.py"
+    helper="$here/../lib/wm_helper.py"
     if [[ -n "${DISPLAY:-}" && -f "$helper" ]]; then
         # Dark title bars + no shadows on borderless popups (see wm_helper.py).
         env LD_LIBRARY_PATH="$ORIG_LD_LIBRARY_PATH" python3 "$helper" "steam_app_$exe" $$ 2>/dev/null &

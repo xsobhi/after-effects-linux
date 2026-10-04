@@ -4,7 +4,12 @@
 # DLL overrides are appended to the .reg file REG (imported once by prefix_setup.sh).
 
 install_gpu_libs() {  # install_gpu_libs PREFIX REG
-    local pfx=$1 reg=$2 lib=$RUNNER_DIR/files/lib/wine win=$1/drive_c/windows f
+    local pfx=$1 reg=$2 lib=$RUNNER_FILES/lib/wine win=$1/drive_c/windows f
+    if [[ ! -d "$lib/dxvk" || ! -d "$lib/vkd3d-proton" ]]; then
+        warn "this Wine has no DXVK/vkd3d-proton (only Proton builds do): Direct3D stays Wine's own"
+        return 0
+    fi
+    [[ -d "$lib/nvidia-libs" ]] || NVIDIA=
     say "Installing DXVK / vkd3d-proton${NVIDIA:+ / NVIDIA CUDA+NVAPI} into the prefix"
     for f in d3d8 d3d9 d3d10core d3d11 dxgi; do
         cp --remove-destination "$lib/dxvk/x86_64-windows/$f.dll" "$win/system32/$f.dll"
