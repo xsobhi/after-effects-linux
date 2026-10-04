@@ -15,14 +15,15 @@ if [[ ! -x "$WINE" ]]; then
     exit 1
 fi
 
-# DirectWrite only knows fonts in the registry's font list, and Tahoma is its last resort:
-# without that entry Direct2D programs (Video Copilot installers, FX Console) draw no text.
-# Wine's own font bookkeeping has removed it from prefixes before; put it back if missing.
-if [[ -n "${1:-}" && -z "${ADOBE_WINE_FONTFIX:-}" && -f "$WINEPREFIX/system.reg" ]] &&
-   ! awk '/^\[Software\\\\Microsoft\\\\Windows NT\\\\CurrentVersion\\\\Fonts\]/ {k = 1; next}
-          k && /^\[/ {exit 1}  k && /^"Tahoma \(TrueType\)"=/ {exit 0}  END {if (!k) exit 1}' \
-        "$WINEPREFIX/system.reg"; then
-    ADOBE_WINE_PREFIX="$WINEPREFIX" "$base/app/bin/ae-linux" fonts "$WINEPREFIX" >/dev/null 2>&1 || true
+# Fonts (lib/fonts.sh): DirectWrite's last-resort Tahoma missing from the registry (Direct2D
+# programs draw no text), fonts installed or removed on the desktop since the last start
+# (Adobe apps must list them afresh), or a Wine font substitute hiding an installed font.
+if [[ -n "${1:-}" && -z "${ADOBE_WINE_FONTFIX:-}" && -f "$base/app/lib/fonts.sh" ]]; then
+    # shellcheck source=../lib/fonts.sh
+    source "$base/app/lib/fonts.sh"
+    if fonts_need_update "$WINEPREFIX"; then
+        ADOBE_WINE_PREFIX="$WINEPREFIX" "$base/app/bin/ae-linux" fonts "$WINEPREFIX" >/dev/null 2>&1 || true
+    fi
 fi
 
 # Library layout the Proton script normally sets up (GStreamer/FFmpeg for Media Foundation).

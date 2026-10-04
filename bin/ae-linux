@@ -1,3 +1,14 @@
+#!/usr/bin/env bash
+# ae-linux — manage Adobe After Effects / Media Encoder under Wine.
+#
+#   ae-linux scan                     list installs found in Wine prefixes
+#   ae-linux setup [PREFIX...]        prepare prefixes with installs (default: all found, or
+#                                     the default prefix) and create menu entries
+#   ae-linux install-app SETUP.exe [PREFIX]   run an Adobe installer in a prefix
+#   ae-linux theme [PREFIX]           re-apply the desktop theme after changing it
+#   ae-linux fonts [PREFIX...]        bring fonts up to date (adobe-wine does it when needed)
+#   ae-linux verify [PREFIX]          check every Adobe program file against Adobe's signature
+#   ae-linux gui                      the same, with dialogs (what the menu entry runs)
 set -euo pipefail
 here=$(dirname "$(readlink -f "$0")")
 LIB_DIR=$(readlink -f "$here/../lib")
@@ -51,7 +62,7 @@ case "$cmd" in
             [[ -d "$prefix/drive_c/$d" ]] && dirs+=("$prefix/drive_c/$d")
         done
         python3 "$LIB_DIR/verify_adobe.py" --scan "${dirs[@]}" ;;
-    fonts)  # DirectWrite font list repair; adobe-wine runs it when Tahoma went missing
+    fonts)  # font list repair, desktop fonts for Adobe apps (adobe-wine runs it when needed)
         for p in "${@:-$DEFAULT_PREFIX}"; do fix_fonts "$p"; done ;;
     gui) exec "$here/ae-linux-gui" ;;
     *) sed -n '2,12s/^# \{0,1\}//p' "$0" ;;

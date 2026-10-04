@@ -7,6 +7,8 @@ source "$LIB_DIR/gpu_libs.sh"
 source "$LIB_DIR/vcruntime.sh"
 # shellcheck source=gdiplus.sh
 source "$LIB_DIR/gdiplus.sh"
+# shellcheck source=fonts.sh
+source "$LIB_DIR/fonts.sh"
 
 run_winetricks() {  # run_winetricks PREFIX VERB...
     local wt="$CACHE_DIR/winetricks-$WINETRICKS_VERSION"
@@ -28,45 +30,79 @@ install_filedialog() {  # install_filedialog PREFIX REG
     done >> "$reg"
 }
 
+installed_copy() {  # installed_copy FONT — the same face installed on the desktop, if any
+    local fam weight slant
+    IFS='|' read -r fam weight slant < <(fc-scan --format '%{family[0]}|%{weight}|%{slant}\n' "$1" 2>/dev/null)
+    [[ -n "$fam" ]] || return 0
+    fam=$(sed 's/[\\:,=-]/\\&/g' <<< "$fam")
+    fc-list --format '%{file}\n' "$fam:weight=$weight:slant=$slant" 2>/dev/null |
+        { grep -v "^$RUNNER_DIR/" || true; } | LC_ALL=C sort | head -1
+}
+
 link_runner_fonts() {  # link_runner_fonts PREFIX REG — what Proton's launcher script does
     # Proton's Wine registers its bundled fonts (Tahoma, Marlett, Microsoft Sans Serif, MS
     # Gothic, SimSun, ...) by file name, expecting them in C:\windows\Fonts, where the
     # proton script normally symlinks them. Without them DirectWrite has no fallback font
     # (D2D apps draw no text at all) and GDI+ cannot find Tahoma. Real files are kept, so
-    # Microsoft's core fonts (corefonts) win over Proton's metric-compatible copies.
+    # Microsoft's core fonts (corefonts) win over Proton's metric-compatible copies, and
+    # where the real Microsoft font is installed on the desktop (~/.local/share/fonts) the
+    # link points at it instead of Proton's look-alike (Noto Sans named "Microsoft Sans
+    # Serif", Source Han Sans named "Microsoft YaHei", ...), which would otherwise be found
+    # first and hide it from GDI and Adobe's font menus.
     # DirectWrite only knows fonts listed in the registry (Proton's template prefix lists
     # them; wineboot does not), so register each linked file as Windows names it. Wine also
     # lists its own fonts under "External Fonts" with the runner's path; once the file is
     # in C:\windows\Fonts that record looks stale, and Wine's clean-up then deletes the
     # same-named Windows entry too (Tahoma vanished, D2D text again). Drop those records.
-    local dir font name style fonts=$1/drive_c/windows/Fonts entries=()
+    local dir font target name style fonts=$1/drive_c/windows/Fonts entries=()
     mkdir -p "$fonts"
     printf '\r\n[HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts]\r\n' >> "$2"
     for dir in "$RUNNER_DIR/files/share/fonts" "$RUNNER_DIR/files/share/wine/fonts"; do
         for font in "$dir"/*.ttf "$dir"/*.ttc; do
             [[ -e "$font" ]] || continue
             [[ -e "$fonts/${font##*/}" && ! -L "$fonts/${font##*/}" ]] && continue
-            ln -sfn "$font" "$fonts/${font##*/}"
-            name=$(fc-scan --format '%{family[0]}\n' "$font" 2>/dev/null | paste -sd'&' | sed 's/&/ \& /g')
+            target=$(installed_copy "$font")
+            target=${target:-$font}
+            ln -sfn "$target" "$fonts/${font##*/}"
+            name=$(fc-scan --format '%{family[0]}\n' "$target" 2>/dev/null | paste -sd'&' | sed 's/&/ \& /g')
             [[ -n "$name" ]] || continue
             # Style from weight/slant (fontconfig: bold >= 200, italic > 0), not localised names.
-            style=$(fc-scan --format '%{weight} %{slant}\n' "$font" 2>/dev/null | head -1 |
+            style=$(fc-scan --format '%{weight} %{slant}\n' "$target" 2>/dev/null | head -1 |
                 awk '{s = ($1 >= 200 ? " Bold" : ""); if ($2 > 0) s = s " Italic"; print s}')
             printf '"%s%s (TrueType)"="%s"\r\n' "$name" "$style" "${font##*/}" >> "$2"
             entries+=("$name$style (TrueType)")
+            # Wine's own records are per face (full name), for each face of a collection
+            mapfile -t -O "${#entries[@]}" entries < <(fc-scan --format '%{fullname[0]} (TrueType)\n' "$target" 2>/dev/null)
         done
     done
     printf '\r\n[HKEY_CURRENT_USER\\Software\\Wine\\Fonts\\External Fonts]\r\n' >> "$2"
-    for name in "${entries[@]}"; do printf '"%s"=-\r\n' "$name" >> "$2"; done
+    printf '%s\n' "${entries[@]}" | LC_ALL=C sort -u | while IFS= read -r name; do
+        printf '"%s"=-\r\n' "$name"
+    done >> "$2"
 }
 
-fix_fonts() {  # fix_fonts PREFIX — register the runner's fonts again (adobe-wine calls this)
+fonts_reg() {  # fonts_reg PREFIX REG — font settings into REG; import it, then run fonts_done
+    link_runner_fonts "$1" "$2"
+    # Desktop fonts that a substitute hides (an installed Helvetica, listed as Arial)
+    printf '\r\n[HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows NT\\CurrentVersion\\FontSubstitutes]\r\n' >> "$2"
+    shadowed_substitutes "$1" | sed 's/[\\"]/\\&/g; s/.*/"&"=-\r/' >> "$2"
+}
+
+fonts_done() {  # fonts_done PREFIX — Adobe apps list the OS fonts afresh at their next start
+    # CoolType's lists of OS fonts; rebuilt at start-up, see lib/fonts.sh
+    find "$1/drive_c/users" -path '*/Adobe/*' \( -name 'AdobeFnt*OSFonts*.lst' -o -name 'AdobeFnt[0-9]*.lst' \) \
+        -delete 2>/dev/null || true
+    fonts_signature > "$1/.adobe-wine-fonts"
+}
+
+fix_fonts() {  # fix_fonts PREFIX — bring the fonts up to date (adobe-wine calls this when needed)
     local reg
     reg=$(mktemp --suffix=.reg)
     printf 'Windows Registry Editor Version 5.00\r\n' > "$reg"
-    link_runner_fonts "$1" "$reg"
+    fonts_reg "$1" "$reg"
     import_reg "$1" "$reg"
     rm -f "$reg"
+    fonts_done "$1"
 }
 
 msxml_progids() {  # msxml_progids PREFIX — version-independent MSXML names -> MSXML 3, as on Windows
@@ -148,8 +184,9 @@ setup_prefix() {  # setup_prefix PREFIX
     install_gdiplus "$pfx" "$reg"
     install_gpu_libs "$pfx" "$reg"
     install_filedialog "$pfx" "$reg"
-    link_runner_fonts "$pfx" "$reg"
+    fonts_reg "$pfx" "$reg"
     import_reg "$pfx" "$reg"
+    fonts_done "$pfx"
     msxml_progids "$pfx"
     # TEMP must stay an expandable string (Proton's user is "steamuser"; adopted prefixes may
     # point at another profile). Wine's regedit misreads hex(2) in UTF-8 .reg files, so use reg.

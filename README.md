@@ -34,6 +34,7 @@ starting or signing in fixed.
 | Clicking an output file in Media Encoder (or any "show in folder") opens Wine's file browser                                                               | Wine's `explorer.exe` hands folders and `/select,FILE` to `winereveal.exe`, which opens your Linux file manager with the file selected (`org.freedesktop.FileManager1`, else `xdg-open`) ([0013](patches/0013-explorer-folders-open-in-the-linux-file-manager.patch))                                                     |
 | Heavy ghosting while scrolling the Effects & Presets panel (pieces of the timeline flash inside it)                                                        | AE scrolls its stacked panels by moving tall child windows; Wine copied their whole old rectangle, including what lay outside the panel, and never repainted it. Only the visible part is copied now and the rest is repainted before the next frame ([0014](patches/0014-win32u-moved-child-windows-copy-only-visible-bits.patch)) |
 | Video Copilot installers / FX Console show no text (Direct2D apps)                                                                                         | DirectWrite only sees fonts in the registry font list and falls back on Tahoma. Proton's fonts are linked into `C:\windows\Fonts` and registered, stale "External Fonts" records that made Wine delete those entries are removed, and `adobe-wine` puts them back (`ae-linux fonts`) if they ever go missing              |
+| Fonts installed on Linux: Helvetica missing from AE's font menu, Tahoma or Courier New Bold listed wrongly, real Microsoft fonts shown as look-alikes | Wine passes the desktop's fonts (`~/.local/share/fonts`, `/usr/share/fonts`) to Windows programs, but its "Helvetica → Arial" and "Times → Times New Roman" substitutes hid an installed Helvetica, Proton's look-alikes (Noto Sans named "Microsoft Sans Serif", …) were found before the real Microsoft fonts, and Adobe's font list cache kept entries of replaced fonts. Substitutes are dropped when the real font is installed, `C:\windows\Fonts` points at the real Microsoft fonts when you have them, and the Adobe font list is rebuilt after fonts are installed or removed (`adobe-wine` checks at each start; `ae-linux fonts`) |
 | VC++ 2015-2022 redistributable setups fail: "Failed to load manifest as XML document" (0x80040111)                                                         | Wine's builtin `msxml2` re-claims `Msxml2.DOMDocument` & co. on every prefix update, but with Microsoft's MSXML 3 installed those MSXML 2.6 classes don't exist; the names are pointed back at MSXML 3, as on Windows                                                                                                     |
 | Splash screen text panel boxed in a shadow                                                                                                                 | Compositor shadow turned off for borderless popups, as on Windows                                                                                                                                                                                                                                                         |
 | No CUDA / GPU sniffing confusion                                                                                                                           | DXVK, vkd3d-proton, DXVK-NVAPI and NVIDIA's CUDA/NVENC bridges from Proton-CachyOS                                                                                                                                                                                                                                        |
@@ -94,12 +95,15 @@ ae-linux scan                    list installs found in Wine prefixes
 ae-linux setup [PREFIX...]       (re)apply everything and create menu entries
 ae-linux install-app SETUP.exe   run an Adobe installer in the prefix
 ae-linux theme [PREFIX]          re-apply after changing your desktop theme
+ae-linux fonts [PREFIX]          refresh fonts now (otherwise done at the next app start)
 ae-linux verify [PREFIX]         check all Adobe files against Adobe's signatures
 adobe-wine PROGRAM.exe           run anything in the Adobe prefix (winecfg, regedit, …)
 ```
 
 ## Tips
 
+- Install fonts the Linux way (double-click → Install, or copy them to `~/.local/share/fonts`):
+  After Effects lists them from its next start. Variable fonts show their default style only.
 - On hybrid-GPU laptops, plug in: battery power-saving profiles throttle the CPU and GPU
   hard, which shows up as stutter in the timeline.
 - Text is rendered by FreeType, so it looks slightly different from Windows ClearType.
