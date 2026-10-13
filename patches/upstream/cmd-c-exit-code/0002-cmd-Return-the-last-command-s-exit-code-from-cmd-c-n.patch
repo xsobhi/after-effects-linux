@@ -1,0 +1,48 @@
+From 8271b237fb29536a456d236df55a11c3491709ac Mon Sep 17 00:00:00 2001
+From: sobhi <nazimakram13@gmail.com>
+Date: Sun, 4 Oct 2026 19:28:45 +0300
+Subject: [PATCH 2/2] cmd: Return the last command's exit code from cmd /c, not
+ ERRORLEVEL.
+
+When the batch run by "cmd /c" ends with a command that succeeded but
+left ERRORLEVEL alone (ECHO after a failed command, for instance), cmd
+returned ERRORLEVEL instead of 0.
+
+Installers run cleanup scripts like this; the Red Giant installers (Magic
+Bullet Suite, Universe) end their preflight script with ECHO after a
+TASKKILL that fails when the service isn't running, and reported
+"Script execution failed".
+---
+ programs/cmd/tests/test_builtins.cmd.exp | 2 +-
+ programs/cmd/wcmdmain.c                  | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/programs/cmd/tests/test_builtins.cmd.exp b/programs/cmd/tests/test_builtins.cmd.exp
+index 8090a1f..4924a0a 100644
+--- a/programs/cmd/tests/test_builtins.cmd.exp
++++ b/programs/cmd/tests/test_builtins.cmd.exp
+@@ -773,7 +773,7 @@ a
+ SUCCESS 0
+ FAILURE 1
+ FAILURE 1
+-@todo_wine@SUCCESS 0
++SUCCESS 0
+ FAILURE 457
+ SUCCESS 0
+ FAILURE 459
+diff --git a/programs/cmd/wcmdmain.c b/programs/cmd/wcmdmain.c
+index c47cef0..dfb7693 100644
+--- a/programs/cmd/wcmdmain.c
++++ b/programs/cmd/wcmdmain.c
+@@ -5092,7 +5092,7 @@ int __cdecl wmain(int argc, WCHAR *argvW[])
+     {
+         RETURN_CODE return_code = WCMD_call_batch(NULL, parameters.initial_command);
+         if (return_code == RETURN_CODE_GOTO) return NO_ERROR;
+-        if (return_code != RETURN_CODE_ABORTED && return_code != RETURN_CODE_EXITED && return_code != NO_ERROR)
++        if (return_code != RETURN_CODE_ABORTED && return_code != RETURN_CODE_EXITED)
+             return return_code;
+         return errorlevel;
+     }
+-- 
+2.43.0
+

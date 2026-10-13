@@ -1,0 +1,53 @@
+From 582b5877973bea946199a2c9280015a595ab634e Mon Sep 17 00:00:00 2001
+From: sobhi <nazimakram13@gmail.com>
+Date: Sun, 4 Oct 2026 19:28:45 +0300
+Subject: [PATCH 1/2] cmd/tests: Test the exit code of cmd /c when the script
+ ends with ECHO after a failure.
+
+---
+ programs/cmd/tests/test_builtins.cmd     | 6 +++++-
+ programs/cmd/tests/test_builtins.cmd.exp | 1 +
+ 2 files changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/programs/cmd/tests/test_builtins.cmd b/programs/cmd/tests/test_builtins.cmd
+index 6dc24df..cb7d5b5 100644
+--- a/programs/cmd/tests/test_builtins.cmd
++++ b/programs/cmd/tests/test_builtins.cmd
+@@ -954,9 +954,13 @@ echo :setError>>sel.bat
+ echo @exit /b %%1>>sel.bat
+ echo @exit /b %%1>selng.bat
+ echo dir IDontExist.DoI> ec.cmd
++echo @dir IDontExist.DoI^>nul 2^>^&1> ec2.cmd
++echo @echo after a failed command>> ec2.cmd
+ call :setError 666 & ((cmd.exe /c "echo a") &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+ call :setError 666 & ((cmd.exe /c "dir IDontExist.DoI">nul) &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+ call :setError 666 & ((cmd.exe /c "ec.cmd">nul) &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
++rem the exit code is the last command's (echo), not ERRORLEVEL
++call :setError 666 & ((cmd.exe /c "ec2.cmd">nul) &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+ call :setError 666 & ((cmd.exe /c "exit /b 457") &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+ call :setError 666 & ((cmd.exe /c "sel.bat 458") &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+ call :setError 666 & ((cmd.exe /c "selng.bat 459") &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+@@ -981,7 +985,7 @@ call :setError 666 & ((echo echo ERRORLEVEL ^^%%errorlevel^^%%| cmd.exe /q /k "@
+ call :setError 666 & ((echo echo ERRORLEVEL ^^%%errorlevel^^%%| cmd.exe /q /k "@echo off & IDontExist.exe") &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+ rem syntax error
+ call :setError 666 & ((echo echo ERRORLEVEL ^^%%errorlevel^^%%| cmd.exe /q /k "@echo off & echo>") &&echo SUCCESS !errorlevel!||echo FAILURE !errorlevel!)
+-erase /q sel.bat selng.bat ec.cmd
++erase /q sel.bat selng.bat ec.cmd ec2.cmd
+ 
+ setlocal DisableDelayedExpansion
+ echo ------------ Testing 'set' ------------
+diff --git a/programs/cmd/tests/test_builtins.cmd.exp b/programs/cmd/tests/test_builtins.cmd.exp
+index 89762fd..8090a1f 100644
+--- a/programs/cmd/tests/test_builtins.cmd.exp
++++ b/programs/cmd/tests/test_builtins.cmd.exp
+@@ -773,6 +773,7 @@ a
+ SUCCESS 0
+ FAILURE 1
+ FAILURE 1
++@todo_wine@SUCCESS 0
+ FAILURE 457
+ SUCCESS 0
+ FAILURE 459
+-- 
+2.43.0
+

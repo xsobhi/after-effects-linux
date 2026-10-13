@@ -1,0 +1,60 @@
+From a21fbdf4837114ba26281b32a57a4303ed792a2f Mon Sep 17 00:00:00 2001
+From: sobhi <nazimakram13@gmail.com>
+Date: Sun, 4 Oct 2026 19:30:05 +0300
+Subject: [PATCH 1/2] winmm/tests: Test the size returned by
+ DRV_QUERYFUNCTIONINSTANCEIDSIZE.
+
+---
+ dlls/winmm/tests/wave.c | 34 ++++++++++++++++++++++++++++++++++
+ 1 file changed, 34 insertions(+)
+
+diff --git a/dlls/winmm/tests/wave.c b/dlls/winmm/tests/wave.c
+index ffc2607..6fb0823 100644
+--- a/dlls/winmm/tests/wave.c
++++ b/dlls/winmm/tests/wave.c
+@@ -2498,8 +2498,42 @@ static void test_formats(void)
+     }
+ }
+ 
++static void test_instance_id(void)
++{
++    ULONG size[2];
++    WCHAR id[512];
++    MMRESULT mr;
++
++    if (!waveOutGetNumDevs())
++    {
++        skip("no wave out devices\n");
++        return;
++    }
++
++    /* the size is a ULONG, also in 64-bit code */
++    size[0] = size[1] = 0xdeadbeef;
++    mr = waveOutMessage((HWAVEOUT)0, DRV_QUERYFUNCTIONINSTANCEIDSIZE, (DWORD_PTR)size, 0);
++    ok(mr == MMSYSERR_NOERROR, "got %u\n", mr);
++    ok(size[0] > sizeof(WCHAR) && size[0] <= sizeof(id), "got size %lu\n", size[0]);
++    todo_wine_if(sizeof(void *) > sizeof(ULONG))
++    ok(size[1] == 0xdeadbeef, "got %#lx after the size\n", size[1]);
++
++    mr = waveOutMessage((HWAVEOUT)0, DRV_QUERYFUNCTIONINSTANCEID, (DWORD_PTR)id, size[0]);
++    ok(mr == MMSYSERR_NOERROR, "got %u\n", mr);
++    ok((wcslen(id) + 1) * sizeof(WCHAR) == size[0], "got %s for size %lu\n", wine_dbgstr_w(id), size[0]);
++
++    if (!waveInGetNumDevs())
++        return;
++    size[0] = size[1] = 0xdeadbeef;
++    mr = waveInMessage((HWAVEIN)0, DRV_QUERYFUNCTIONINSTANCEIDSIZE, (DWORD_PTR)size, 0);
++    ok(mr == MMSYSERR_NOERROR, "got %u\n", mr);
++    todo_wine_if(sizeof(void *) > sizeof(ULONG))
++    ok(size[1] == 0xdeadbeef, "got %#lx after the size\n", size[1]);
++}
++
+ START_TEST(wave)
+ {
++    test_instance_id();
+     test_multiple_waveopens();
+     wave_out_tests();
+     test_sndPlaySound();
+-- 
+2.43.0
+
